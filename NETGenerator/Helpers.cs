@@ -99,13 +99,13 @@ namespace PascalABCCompiler.NETGenerator {
 		public bool is_typed_file=false;
 		public bool is_text_file=false;
 		public int arr_len;
-		public ConstructorInfo def_cnstr;//конструктор по умолчанию типа (если он есть)
-		public FieldInfo arr_fld;//ссылка на поле массива в оболочке над массивом
-		public MethodInfo clone_meth;//метод копирования в массиве
-		public MethodInfo init_meth;//метод инициализации
-        public MethodInfo assign_meth;//метод присваивания значений размерных типов
-        public ConstructorBuilder static_cnstr;
-        public MethodBuilder fix_meth;
+		public Mono.Cecil.MethodReference def_cnstr;//конструктор по умолчанию типа (если он есть)
+		public Mono.Cecil.FieldReference arr_fld;//ссылка на поле массива в оболочке над массивом
+		public Mono.Cecil.MethodReference clone_meth;//метод копирования в массиве
+		public Mono.Cecil.MethodReference init_meth;//метод инициализации
+        public Mono.Cecil.MethodReference assign_meth;//метод присваивания значений размерных типов
+        public Mono.Cecil.MethodDefinition static_cnstr;
+        public Mono.Cecil.MethodDefinition fix_meth;
 		//временно для событий
 		public MethodBuilder handl_meth;
 		public bool has_events=false;//есть ли в типе события
@@ -119,7 +119,8 @@ namespace PascalABCCompiler.NETGenerator {
 			_tp = tp;
 		}
 		
-		public Type tp {
+		// тут нужны именно референсы
+		public Mono.Cecil.TypeReference tp {
 			get {
 				return _tp;
 			}
@@ -173,7 +174,7 @@ namespace PascalABCCompiler.NETGenerator {
 			_fi = fi;
 		}
 
-        public FieldInfo fi
+        public Mono.Cecil.FieldReference fi
         {
 			get {
 				return _fi;
@@ -195,9 +196,9 @@ namespace PascalABCCompiler.NETGenerator {
     public class GenericFldInfo : FldInfo
     {
         private Type _field_type;
-        public FieldInfo prev_fi; // передаю чтобы на третьем этапе в NegGenerator.cs (примерно 1586) можно было сконструировать правильный тип. Костыль для #1632
+        public Mono.Cecil.FieldReference prev_fi; // передаю чтобы на третьем этапе в NegGenerator.cs (примерно 1586) можно было сконструировать правильный тип. Костыль для #1632
 
-        public override Type field_type
+        public override Mono.Cecil.TypeReference field_type
         {
             get
             {
@@ -221,7 +222,7 @@ namespace PascalABCCompiler.NETGenerator {
     		this._prop = _prop;
     	}
     	
-    	public PropertyInfo prop
+    	public Mono.Cecil.PropertyReference prop
     	{
     		get
     		{
@@ -306,7 +307,7 @@ namespace PascalABCCompiler.NETGenerator {
 			}
 		}
 		
-		public MethodInfo mi {
+		public Mono.Cecil.MethodReference mi {
 			get {
 				return _mi;
 			}
@@ -324,7 +325,7 @@ namespace PascalABCCompiler.NETGenerator {
 			}
 		}
 		
-		public ConstructorInfo cnstr {
+		public Mono.Cecil.MethodReference cnstr {
 			get {
 				return _cnstr;
 			}
@@ -360,7 +361,7 @@ namespace PascalABCCompiler.NETGenerator {
 			}
 		}
 		
-		public LocalBuilder frame {
+		public Mono.Cecil.Cil.VariableDefinition frame {
 			get {
 				return _frame;
 			}
@@ -411,7 +412,7 @@ namespace PascalABCCompiler.NETGenerator {
 			}
 		}
 		
-		public FieldBuilder fb {
+		public Mono.Cecil.FieldDefinition fb {
 			get {
 				return _fb;
 			}
@@ -429,7 +430,7 @@ namespace PascalABCCompiler.NETGenerator {
 			}
 		}
 		
-		public LocalBuilder lb {
+		public Mono.Cecil.Cil.VariableDefinition lb {
 			get {
 				return _lb;
 			}
@@ -475,7 +476,7 @@ namespace PascalABCCompiler.NETGenerator {
 			}
 		}
 		
-		public FieldBuilder fb {
+		public Mono.Cecil.FieldDefinition fb {
 			get {
 				return _fb;
 			}
@@ -484,7 +485,7 @@ namespace PascalABCCompiler.NETGenerator {
 			}
 		}
 		
-		public ParameterBuilder pb {
+		public Mono.Cecil.ParameterDefinition pb {
 			get {
 				return _pb;
 			}
@@ -495,7 +496,7 @@ namespace PascalABCCompiler.NETGenerator {
 	}
 	
 	public class ConstInfo : NodeInfo {
-		public FieldBuilder fb;
+		public Mono.Cecil.FieldDefinition fb;
 		
 		public ConstInfo(FieldBuilder fb)
 		{
@@ -505,10 +506,10 @@ namespace PascalABCCompiler.NETGenerator {
 	
 	//Структура для записи активации процедуры
 	public class Frame {
-		public TypeBuilder tb; //класс - запись активации
-		public FieldBuilder parent; //поле-ссылка на род. запись активации
-		public ConstructorBuilder cb; //конструктор записи активации
-		public MethodBuilder mb;
+		public Mono.Cecil.TypeDefinition tb; //класс - запись активации
+		public Mono.Cecil.FieldDefinition parent; //поле-ссылка на род. запись активации
+		public Mono.Cecil.MethodDefinition cb; //конструктор записи активации
+		public Mono.Cecil.MethodDefinition mb;
 		
 		public Frame() {}
 	}
@@ -523,27 +524,27 @@ namespace PascalABCCompiler.NETGenerator {
 
 		public Helper() {}
 		
-		public void AddDummyMethod(TypeBuilder tb, MethodBuilder mb)
+		public void AddDummyMethod(Mono.Cecil.TypeDefinition tb, Mono.Cecil.MethodDefinition mb)
         {
 			dummy_methods[tb] = mb;
         }
 
-		public MethodBuilder GetDummyMethod(TypeBuilder tb)
+		public Mono.Cecil.MethodDefinition GetDummyMethod(Mono.Cecil.TypeDefinition tb)
         {
-			return dummy_methods[tb] as MethodBuilder;
+			return dummy_methods[tb] as Mono.Cecil.MethodDefinition;
         }
 
-		public void AddPascalTypeReference(ITypeNode tn, Type t)
+		public void AddPascalTypeReference(ITypeNode tn, Mono.Cecil.TypeReference t)
 		{
 			pas_defs[tn] = t;
 		}
 		
-		public Type GetPascalTypeReference(ITypeNode tn)
+		public Mono.Cecil.TypeReference GetPascalTypeReference(ITypeNode tn)
 		{
 			return pas_defs[tn] as Type;
 		}
 		
-		public ConstInfo AddConstant(IConstantDefinitionNode cnst, FieldBuilder fb)
+		public ConstInfo AddConstant(IConstantDefinitionNode cnst, Mono.Cecil.FieldDefinition fb)
 		{
 			ConstInfo ci = new ConstInfo(fb);
 			defs[cnst] = ci;
@@ -551,7 +552,7 @@ namespace PascalABCCompiler.NETGenerator {
 		}
 		
         //добавление локальной переменной
-		public VarInfo AddVariable(IVAriableDefinitionNode var, LocalBuilder lb)
+		public VarInfo AddVariable(IVAriableDefinitionNode var, Mono.Cecil.Cil.VariableDefinition lb)
 		{
 			VarInfo vi = new VarInfo(lb);
 			defs[var] = vi;
@@ -578,7 +579,7 @@ namespace PascalABCCompiler.NETGenerator {
 		}
 		
         //добавление глоб. переменной
-		public VarInfo AddGlobalVariable(IVAriableDefinitionNode var, FieldBuilder fb)
+		public VarInfo AddGlobalVariable(IVAriableDefinitionNode var, Mono.Cecil.FieldDefinition fb)
 		{
 			VarInfo vi = new VarInfo();
 			defs[var] = vi;
@@ -600,7 +601,7 @@ namespace PascalABCCompiler.NETGenerator {
 		}
 		
         //добавление нелок. переменной
-		public VarInfo AddNonLocalVariable(IVAriableDefinitionNode var, FieldBuilder fb)
+		public VarInfo AddNonLocalVariable(IVAriableDefinitionNode var, Mono.Cecil.FieldDefinition fb)
 		{
 			VarInfo vi = new VarInfo();
 			defs[var] = vi;
@@ -610,7 +611,8 @@ namespace PascalABCCompiler.NETGenerator {
 		}
 		
         //добавление функции (метода)
-		public MethInfo AddMethod(IFunctionNode func, MethodInfo mi)
+		// именно реф, потому что методы генерик класса
+		public MethInfo AddMethod(IFunctionNode func, Mono.Cecil.MethodReference mi)
 		{
 			MethInfo m = new MethInfo(mi);
 			defs[func] = m;
@@ -618,7 +620,7 @@ namespace PascalABCCompiler.NETGenerator {
 		}
 		
         //добавление функции, вложенной в функцию
-		public MethInfo AddMethod(IFunctionNode func, MethodInfo mi, MethInfo up)
+		public MethInfo AddMethod(IFunctionNode func, Mono.Cecil.MethodReference mi, MethInfo up)
 		{
 			MethInfo m = new MethInfo(mi);
 			m.up_meth = up;
@@ -633,7 +635,8 @@ namespace PascalABCCompiler.NETGenerator {
 		}
 		
         //добавление конструктора
-		public MethInfo AddConstructor(IFunctionNode func, ConstructorInfo ci)
+		// нужны именно референсы
+		public MethInfo AddConstructor(IFunctionNode func, Mono.Cecil.MethodReference ci)
 		{
 			//ConstrInfo m = new ConstrInfo(ci);
 			MethInfo mi = new MethInfo();
@@ -642,7 +645,7 @@ namespace PascalABCCompiler.NETGenerator {
 			return mi;
 		}
 		
-		public PropInfo AddProperty(IPropertyNode prop, PropertyInfo pi)
+		public PropInfo AddProperty(IPropertyNode prop, Mono.Cecil.PropertyReference pi)
 		{
 			PropInfo pi2 = new PropInfo(pi);
 			defs[prop] = pi2;
@@ -677,7 +680,7 @@ namespace PascalABCCompiler.NETGenerator {
         }
 
         //добавление параметра
-		public ParamInfo AddParameter(IParameterNode p, ParameterBuilder pb)
+		public ParamInfo AddParameter(IParameterNode p, Mono.Cecil.ParameterDefinition pb)
 		{
 			ParamInfo pi = new ParamInfo(pb);
 			defs[p] = pi;
@@ -685,7 +688,7 @@ namespace PascalABCCompiler.NETGenerator {
 		}
 		
         //добавление нелок. параметра
-		public ParamInfo AddGlobalParameter(IParameterNode p, FieldBuilder fb)
+		public ParamInfo AddGlobalParameter(IParameterNode p, Mono.Cecil.FieldDefinition fb)
 		{
 			ParamInfo pi = new ParamInfo();
 			pi.kind = ParamKind.pkGlobal;
@@ -701,7 +704,7 @@ namespace PascalABCCompiler.NETGenerator {
 		}
 		
         //добавление поля
-		public FldInfo AddField(ICommonClassFieldNode f, FieldInfo fb)
+		public FldInfo AddField(ICommonClassFieldNode f, Mono.Cecil.FieldReference fb)
 		{
 			FldInfo fi = new FldInfo(fb);
 #if DEBUG
@@ -714,7 +717,7 @@ namespace PascalABCCompiler.NETGenerator {
             return fi;
 		}
 		
-        public FldInfo AddGenericField(ICommonClassFieldNode f, FieldInfo fb, Type field_type, FieldInfo prev_fi)
+        public FldInfo AddGenericField(ICommonClassFieldNode f, Mono.Cecil.FieldReference fb, Mono.Cecil.TypeReference field_type, Mono.Cecil.FieldReference prev_fi)
         {
             FldInfo fi = new GenericFldInfo(fb, field_type, prev_fi); // prev_fi - чтобы сконструировать на последнем этапе fi 
 #if DEBUG
@@ -751,21 +754,21 @@ namespace PascalABCCompiler.NETGenerator {
 		}
 		
         //добавление типа
-		public TypeInfo AddType(ITypeNode type, TypeBuilder tb)
+		public TypeInfo AddType(ITypeNode type, Mono.Cecil.TypeDefinition tb)
 		{
 			TypeInfo ti = new TypeInfo(tb);
 			defs[type] = ti;
 			return ti;
 		}
 		
-        public TypeInfo AddEnum(ITypeNode type, EnumBuilder emb)
+        public TypeInfo AddEnum(ITypeNode type, Mono.Cecil.TypeDefinition emb)
         {
             TypeInfo ti = new TypeInfo(emb);
             defs[type] = ti;
             return ti;
         }
 
-        public TypeInfo AddExistingType(ITypeNode type, Type t)
+        public TypeInfo AddExistingType(ITypeNode type, Mono.Cecil.TypeReference t)
         {
             TypeInfo ti = new TypeInfo(t);
             defs[type] = ti;
@@ -841,7 +844,7 @@ namespace PascalABCCompiler.NETGenerator {
         /// До вызова <c>.CreateType()</c> позволяет определить, был ли тип объявлен в коде, а не в готовой сборке.
         /// Generic типы инстанцированные Pascal типами также считаются Pascal типами (пример: <c>IEnumerable&lt;PascalType&gt;</c>)
         /// </summary>
-        public bool IsPascalType(Type t)
+        public bool IsPascalType(Mono.Cecil.TypeReference t)
         {
             if (t is TypeBuilder || t is GenericTypeParameterBuilder || t is EnumBuilder || t.GetType().FullName == "System.Reflection.Emit.TypeBuilderInstantiation")
                 return true;
@@ -1017,7 +1020,7 @@ namespace PascalABCCompiler.NETGenerator {
 			return null;
 		}
 		
-		public MethodBuilder GetMethodBuilder(IFunctionNode meth)
+		public Mono.Cecil.MethodDefinition GetMethodBuilder(IFunctionNode meth)
 		{
 			MethInfo mi = defs[meth] as MethInfo;
 			if (mi != null)

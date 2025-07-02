@@ -979,7 +979,8 @@ namespace PascalABCCompiler.SemanticTree
 	public interface ICompiledMethodNode : IFunctionNode, ICompiledClassMemberNode
 	{
 		//Откомпилированный метод.
-		System.Reflection.MethodInfo method_info
+		// должен быть именно референс
+		Mono.Cecil.MethodReference method_info
 		{
 			get;
 		}
@@ -993,7 +994,7 @@ namespace PascalABCCompiler.SemanticTree
 	//Вызов конструктора откомпилированного типа.
 	public interface ICompiledConstructorNode : IFunctionNode, ICompiledClassMemberNode
 	{
-		System.Reflection.ConstructorInfo constructor_info
+		Mono.Cecil.MethodReference constructor_info
 		{
 			get;
 		}
@@ -1994,7 +1995,7 @@ namespace PascalABCCompiler.SemanticTree
 	//Переменная, определенная в откомпилированном классе.
 	public interface ICompiledClassFieldNode : IVAriableDefinitionNode, ICompiledClassMemberNode
 	{
-		System.Reflection.FieldInfo compiled_field
+		Mono.Cecil.FieldReference compiled_field
 		{
 			get;
 		}
@@ -2203,7 +2204,7 @@ namespace PascalABCCompiler.SemanticTree
 	public interface ICompiledPropertyNode : IPropertyNode, ICompiledClassMemberNode
 	{
 		//Свойство в сборке.
-		System.Reflection.PropertyInfo property_info
+		Mono.Cecil.PropertyReference property_info
 		{
 			get;
 		}

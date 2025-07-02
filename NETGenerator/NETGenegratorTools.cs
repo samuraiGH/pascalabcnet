@@ -18,7 +18,7 @@ namespace PascalABCCompiler.NETGenerator
         public static TypeInfo char_type;
         public static TypeInfo string_type;
         public static TypeInfo byte_type;
-        public static Type ExceptionType = typeof(Exception);
+        public static Mono.Cecil.TypeReference ExceptionType = typeof(Exception);
         public static Type VoidType =   typeof(void);
         public static Type StringType = typeof(string);
         public static Type ObjectType = typeof(object);
@@ -56,11 +56,11 @@ namespace PascalABCCompiler.NETGenerator
 
         private static Hashtable types;
         private static Hashtable sizes;
-        public static MethodInfo ArrayCopyMethod;
+        public static Mono.Cecil.MethodReference ArrayCopyMethod;
         public static MethodInfo GetTypeFromHandleMethod;
 		public static MethodInfo ResizeMethod;
         public static MethodInfo GCHandleFreeMethod;
-		public static MethodInfo StringNullOrEmptyMethod;
+		public static Mono.Cecil.MethodReference StringNullOrEmptyMethod;
         public static MethodInfo UnsizedArrayCreateMethodTemplate = null;
         public static MethodInfo GCHandleAlloc;
         public static MethodInfo GCHandleAllocPinned;
@@ -68,7 +68,7 @@ namespace PascalABCCompiler.NETGenerator
         public static MethodInfo StringLengthMethod;
         public static MethodInfo CharToString;
         public static ConstructorInfo IndexOutOfRangeConstructor;
-        public static ConstructorInfo ParamArrayAttributeConstructor;
+        public static Mono.Cecil.MethodReference ParamArrayAttributeConstructor;
         public static MethodInfo StringCopyMethod;
 
         public static MethodInfo GetUnsizedArrayCreateMethod(TypeInfo ti)
@@ -131,7 +131,7 @@ namespace PascalABCCompiler.NETGenerator
             CharToString = typeof(char).GetMethod("ToString", BindingFlags.Static | BindingFlags.Public);
         }
 
-        public static bool IsStandType(Type t)
+        public static bool IsStandType(Mono.Cecil.TypeReference t)
         {
             return types[t] != null;
         }
@@ -188,7 +188,7 @@ namespace PascalABCCompiler.NETGenerator
             }
         }
         
-        public static void PushStelem(ILGenerator il,Type elem_type)
+        public static void PushStelem(Mono.Cecil.Cil.ILProcessor il,Mono.Cecil.TypeReference elem_type)
         {
             switch (Type.GetTypeCode(elem_type))
             {
@@ -232,7 +232,7 @@ namespace PascalABCCompiler.NETGenerator
             }
         }
 
-        public static void PushParameterDereference(ILGenerator il, Type elem_type)
+        public static void PushParameterDereference(Mono.Cecil.Cil.ILProcessor il, Mono.Cecil.TypeReference elem_type)
         {
             switch (Type.GetTypeCode(elem_type))
             {
@@ -329,7 +329,7 @@ namespace PascalABCCompiler.NETGenerator
                     break;
             }           
         }
-        public static void LdcIntConst(ILGenerator il, int e)
+        public static void LdcIntConst(Mono.Cecil.Cil.ILProcessor il, int e)
         {
             switch (e)
             {
@@ -461,7 +461,7 @@ namespace PascalABCCompiler.NETGenerator
             return lb;
         }
         
-        public static LocalBuilder CreateLocalAndLdloca(ILGenerator il, Type tp)
+        public static LocalBuilder CreateLocalAndLdloca(Mono.Cecil.Cil.ILProcessor il, Mono.Cecil.TypeReference tp)
         {
             LocalBuilder lb = il.DeclareLocal(tp);
             il.Emit(OpCodes.Stloc, lb);
@@ -469,7 +469,7 @@ namespace PascalABCCompiler.NETGenerator
             return lb;
         }
 
-        public static void CreateBoundedArray(ILGenerator il, FieldBuilder fb, TypeInfo ti)
+        public static void CreateBoundedArray(Mono.Cecil.Cil.ILProcessor il, Mono.Cecil.FieldDefinition fb, TypeInfo ti)
         {
             Label lbl = il.DefineLabel();
             if (fb.IsStatic)
@@ -492,7 +492,7 @@ namespace PascalABCCompiler.NETGenerator
             il.MarkLabel(lbl);
         }
 
-        public static void CreateBoudedArray(ILGenerator il, LocalBuilder lb, TypeInfo ti)
+        public static void CreateBoudedArray(Mono.Cecil.Cil.ILProcessor il, Mono.Cecil.Cil.VariableDefinition lb, TypeInfo ti)
         {
             Label lbl = il.DefineLabel();
             il.Emit(OpCodes.Ldloc, lb);
@@ -509,7 +509,7 @@ namespace PascalABCCompiler.NETGenerator
             return ti.arr_fld != null;
         }
 
-        public static void FixField(MethodBuilder mb, FieldBuilder fb, TypeInfo ti)
+        public static void FixField(Mono.Cecil.MethodDefinition mb, Mono.Cecil.FieldDefinition fb, TypeInfo ti)
         {
             ILGenerator il = mb.GetILGenerator();
             il.Emit(OpCodes.Ldarg_0);
@@ -526,7 +526,7 @@ namespace PascalABCCompiler.NETGenerator
             il.Emit(OpCodes.Pop);
         }
 
-        public static void CloneField(MethodBuilder clone_meth, FieldBuilder fb, TypeInfo ti)
+        public static void CloneField(Mono.Cecil.MethodDefinition clone_meth, Mono.Cecil.FieldDefinition fb, TypeInfo ti)
         {
             ILGenerator il = clone_meth.GetILGenerator();
             il.Emit(OpCodes.Ldloca_S, (byte)0);
@@ -546,7 +546,7 @@ namespace PascalABCCompiler.NETGenerator
             il.Emit(OpCodes.Stfld, fb);
         }
 
-        public static void AssignField(MethodBuilder ass_meth, FieldBuilder fb, TypeInfo ti)
+        public static void AssignField(Mono.Cecil.MethodDefinition ass_meth, Mono.Cecil.FieldDefinition fb, TypeInfo ti)
         {
             ILGenerator il = ass_meth.GetILGenerator();
             il.Emit(OpCodes.Ldarg_0);
@@ -566,7 +566,7 @@ namespace PascalABCCompiler.NETGenerator
             il.Emit(OpCodes.Stfld, fb);
         }
 
-        public static void PushTypeOf(ILGenerator il, Type tp)
+        public static void PushTypeOf(Mono.Cecil.Cil.ILProcessor il, Mono.Cecil.TypeReference tp)
         {
             il.Emit(OpCodes.Ldtoken, tp);
             il.EmitCall(OpCodes.Call, TypeFactory.GetTypeFromHandleMethod, null);
