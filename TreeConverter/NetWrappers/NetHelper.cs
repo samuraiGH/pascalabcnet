@@ -970,7 +970,7 @@ namespace PascalABCCompiler.NetHelper
             special_types[t.MetadataToken] = t;
         }
 
-		public static bool IsStandType(Type t)
+		public static bool IsStandType(Mono.Cecil.TypeReference t)
 		{
 			if (stand_types[t] != null) return true;
 			return false;
