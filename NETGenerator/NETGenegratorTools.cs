@@ -1,15 +1,21 @@
 ﻿// Copyright (c) Ivan Bondarev, Stanislav Mikhalkovich (for details please see \doc\copyright.txt)
 // This code is distributed under the GNU LGPL (for details please see \doc\license.txt)
+using PascalABCCompiler.TreeRealization;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Security;
 
+using OpCodes = Mono.Cecil.Cil.OpCodes;
+
 namespace PascalABCCompiler.NETGenerator
 {
+    // TODO многие из этих типов сравниваются через ==
+    // нужно проверить, что сравнение заменено на .FullName
     public class TypeFactory
     {
         public static Type AttributeType = typeof(Attribute);
@@ -52,16 +58,16 @@ namespace PascalABCCompiler.NETGenerator
         public static Type IEnumerableGenericType = typeof(System.Collections.Generic.IEnumerable<>);
         public static Type IEnumeratorGenericType = typeof(System.Collections.Generic.IEnumerator<>);
 
-        private static HashSet<Type> types;
-        private static Dictionary<Type, int> sizes;
+        private static HashSet<Mono.Cecil.TypeReference> types;
+        private static Dictionary<Mono.Cecil.TypeReference, int> sizes;
 
         public static MethodInfo ArrayCopyMethod;
         public static MethodInfo ArrayLengthGetMethod;
         public static MethodInfo GetTypeFromHandleMethod;
         public static MethodInfo ResizeMethod;
         public static MethodInfo GCHandleFreeMethod;
-        public static MethodInfo StringNullOrEmptyMethod;
         public static MethodInfo StringCopyMethod;
+        public static MethodInfo StringNullOrEmptyMethod;
         public static MethodInfo GCHandleAlloc;
         public static MethodInfo GCHandleAllocPinned;
         public static MethodInfo OffsetToStringDataProperty;
@@ -98,6 +104,7 @@ namespace PascalABCCompiler.NETGenerator
         public static PropertyInfo SecurityRulesAttributeSkipVerificationInFullTrustProperty;
 
         public static ConstructorInfo IndexOutOfRangeCtor;
+        public static ConstructorInfo AttributeCtor;
         public static ConstructorInfo ParamArrayAttributeCtor;
         public static ConstructorInfo DebuggableAttributeCtor;
         public static ConstructorInfo AssemblyKeyFileAttributeCtor;
@@ -109,34 +116,41 @@ namespace PascalABCCompiler.NETGenerator
         public static ConstructorInfo AssemblyTitleAttributeCtor;
         public static ConstructorInfo AssemblyDescriptionAttributeCtor;
 
-        static TypeFactory()
+        public static void Init(Mono.Cecil.ModuleDefinition module)
         {
-            types = new HashSet<Type>()
-            {
-                BoolType, SByteType, ByteType, CharType,
-                Int16Type, Int32Type, Int64Type,
-                UInt16Type, UInt32Type, UInt64Type,
-                SingleType, DoubleType
-            };
+            var comparer = new TypeRefComparer();
 
-            sizes = new Dictionary<Type, int>
+            types = new HashSet<Mono.Cecil.TypeReference>(comparer)
             {
-                [BoolType] = sizeof(Boolean),
-                [SByteType] = sizeof(SByte),
-                [ByteType] = sizeof(Byte),
-                [CharType] = sizeof(Char),
-                [Int16Type] = sizeof(Int16),
-                [Int32Type] = sizeof(Int32),
-                [Int64Type] = sizeof(Int64),
-                [UInt16Type] = sizeof(UInt16),
-                [UInt32Type] = sizeof(UInt32),
-                [UInt64Type] = sizeof(UInt64),
-                [SingleType] = sizeof(Single),
-                [DoubleType] = sizeof(Double)
+                module.TypeSystem.Boolean, module.TypeSystem.SByte, module.TypeSystem.Byte, module.TypeSystem.Char,
+                module.TypeSystem.Int16, module.TypeSystem.Int32, module.TypeSystem.Int64,
+                module.TypeSystem.UInt16, module.TypeSystem.UInt32, module.TypeSystem.UInt64,
+                module.TypeSystem.Single, module.TypeSystem.Double
+            };
+            
+            sizes = new Dictionary<Mono.Cecil.TypeReference, int>(comparer)
+            {
+                [module.TypeSystem.Boolean] = sizeof(Boolean),
+                [module.TypeSystem.SByte] = sizeof(SByte),
+                [module.TypeSystem.Byte] = sizeof(Byte),
+                [module.TypeSystem.Char] = sizeof(Char),
+                [module.TypeSystem.Int16] = sizeof(Int16),
+                [module.TypeSystem.Int32] = sizeof(Int32),
+                [module.TypeSystem.Int64] = sizeof(Int64),
+                [module.TypeSystem.UInt16] = sizeof(UInt16),
+                [module.TypeSystem.UInt32] = sizeof(UInt32),
+                [module.TypeSystem.UInt64] = sizeof(UInt64),
+                [module.TypeSystem.Single] = sizeof(Single),
+                [module.TypeSystem.Double] = sizeof(Double)
             };
             //sizes[UIntPtr] = sizeof(UIntPtr);
             
             //types[TypeType] = TypeType;
+        }
+
+        static TypeFactory()
+        {
+            
             ArrayCopyMethod = ArrayType.GetMethod("Copy", new Type[3] { ArrayType, ArrayType, Int32Type });
             ArrayLengthGetMethod = ArrayType.GetMethod("get_Length");
             StringNullOrEmptyMethod = StringType.GetMethod("IsNullOrEmpty");
@@ -180,6 +194,7 @@ namespace PascalABCCompiler.NETGenerator
             SecurityRulesAttributeSkipVerificationInFullTrustProperty = typeof(SecurityRulesAttribute).GetProperty("SkipVerificationInFullTrust");
 
             IndexOutOfRangeCtor = typeof(IndexOutOfRangeException).GetConstructor(Type.EmptyTypes);
+            AttributeCtor = typeof(Attribute).GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic).First(item=> item.GetParameters().Length==0);
             ParamArrayAttributeCtor = typeof(ParamArrayAttribute).GetConstructor(Type.EmptyTypes);
             DebuggableAttributeCtor = typeof(System.Diagnostics.DebuggableAttribute).GetConstructor(new Type[] { BoolType, BoolType });
             AssemblyKeyFileAttributeCtor = typeof(AssemblyKeyFileAttribute).GetConstructor(new Type[] { StringType });
@@ -192,12 +207,12 @@ namespace PascalABCCompiler.NETGenerator
             AssemblyDescriptionAttributeCtor = typeof(AssemblyDescriptionAttribute).GetConstructor(new Type[] { StringType });
         }
 
-        public static bool IsStandType(Type t)
+        public static bool IsStandType(Mono.Cecil.TypeReference t)
         {
             return types.Contains(t);
         }
 
-        public static int GetPrimitiveTypeSize(Type PrimitiveType)
+        public static int GetPrimitiveTypeSize(Mono.Cecil.TypeReference PrimitiveType)
         {
             return sizes[PrimitiveType];
         }
@@ -205,32 +220,39 @@ namespace PascalABCCompiler.NETGenerator
 
     class NETGeneratorTools
     {
-        public static void PushStind(ILGenerator il, Type elem_type)
+        private static Mono.Cecil.ModuleDefinition module;
+
+        public static void Init(Mono.Cecil.ModuleDefinition modul)
         {
-            switch (Type.GetTypeCode(elem_type))
+            module = modul;
+        }
+
+        public static void PushStind(Mono.Cecil.Cil.ILProcessor il, Mono.Cecil.TypeReference elem_type)
+        {
+            switch (elem_type.MetadataType)
             {
-                case TypeCode.Boolean:
-                case TypeCode.Byte:
-                case TypeCode.SByte:
+                case Mono.Cecil.MetadataType.Boolean:
+                case Mono.Cecil.MetadataType.Byte:
+                case Mono.Cecil.MetadataType.SByte:
                     il.Emit(OpCodes.Stind_I1);
                     break;
-                case TypeCode.Char:
-                case TypeCode.Int16:
-                case TypeCode.UInt16:
+                case Mono.Cecil.MetadataType.Char:
+                case Mono.Cecil.MetadataType.Int16:
+                case Mono.Cecil.MetadataType.UInt16:
                     il.Emit(OpCodes.Stind_I2);
                     break;
-                case TypeCode.Int32:
-                case TypeCode.UInt32:
+                case Mono.Cecil.MetadataType.Int32:
+                case Mono.Cecil.MetadataType.UInt32:
                     il.Emit(OpCodes.Stind_I4);
                     break;
-                case TypeCode.Int64:
-                case TypeCode.UInt64:
+                case Mono.Cecil.MetadataType.Int64:
+                case Mono.Cecil.MetadataType.UInt64:
                     il.Emit(OpCodes.Stind_I8);
                     break;
-                case TypeCode.Single:
+                case Mono.Cecil.MetadataType.Single:
                     il.Emit(OpCodes.Stind_R4);
                     break;
-                case TypeCode.Double:
+                case Mono.Cecil.MetadataType.Double:
                     il.Emit(OpCodes.Stind_R8);
                     break;
                 default:
@@ -249,39 +271,39 @@ namespace PascalABCCompiler.NETGenerator
             }
         }
         
-        public static void PushStelem(ILGenerator il,Type elem_type)
+        public static void PushStelem(Mono.Cecil.Cil.ILProcessor il,Mono.Cecil.TypeReference elem_type)
         {
-            switch (Type.GetTypeCode(elem_type))
+            switch (elem_type.MetadataType)
             {
-                case TypeCode.Boolean:
-                case TypeCode.Byte:
-                case TypeCode.SByte:
+                case Mono.Cecil.MetadataType.Boolean:
+                case Mono.Cecil.MetadataType.Byte:
+                case Mono.Cecil.MetadataType.SByte:
                     il.Emit(OpCodes.Stelem_I1);
                     break;
-                case TypeCode.Char:
-                case TypeCode.Int16:
-                case TypeCode.UInt16:
+                case Mono.Cecil.MetadataType.Char:
+                case Mono.Cecil.MetadataType.Int16:
+                case Mono.Cecil.MetadataType.UInt16:
                     il.Emit(OpCodes.Stelem_I2);
                     break;
-                case TypeCode.Int32:
-                case TypeCode.UInt32:
+                case Mono.Cecil.MetadataType.Int32:
+                case Mono.Cecil.MetadataType.UInt32:
                     il.Emit(OpCodes.Stelem_I4);
                     break;
-                case TypeCode.Int64:
-                case TypeCode.UInt64:
+                case Mono.Cecil.MetadataType.Int64:
+                case Mono.Cecil.MetadataType.UInt64:
                     il.Emit(OpCodes.Stelem_I8);
                     break;
-                case TypeCode.Single:
+                case Mono.Cecil.MetadataType.Single:
                     il.Emit(OpCodes.Stelem_R4);
                     break;
-                case TypeCode.Double:
+                case Mono.Cecil.MetadataType.Double:
                     il.Emit(OpCodes.Stelem_R8);
                     break;
                 default:
                     if (IsPointer(elem_type))
                         il.Emit(OpCodes.Stelem_I);
                     else if (elem_type.IsGenericParameter)
-                        il.Emit(OpCodes.Stelem, elem_type);
+                        il.Emit(OpCodes.Stelem_Any, elem_type);
                     else if (IsEnum(elem_type))
                         il.Emit(OpCodes.Stelem_I4);
                     else 
@@ -293,38 +315,38 @@ namespace PascalABCCompiler.NETGenerator
             }
         }
 
-        public static void PushParameterDereference(ILGenerator il, Type elem_type)
+        public static void PushParameterDereference(Mono.Cecil.Cil.ILProcessor il, Mono.Cecil.TypeReference elem_type)
         {
-            switch (Type.GetTypeCode(elem_type))
+            switch (elem_type.MetadataType)
             {
-                case TypeCode.Boolean:
-                case TypeCode.Byte:
+                case Mono.Cecil.MetadataType.Boolean:
+                case Mono.Cecil.MetadataType.Byte:
                     il.Emit(OpCodes.Ldind_U1);
                     break;
-                case TypeCode.SByte:
+                case Mono.Cecil.MetadataType.SByte:
                     il.Emit(OpCodes.Ldind_I1);
                     break;
-                case TypeCode.Char:
-                case TypeCode.UInt16:
+                case Mono.Cecil.MetadataType.Char:
+                case Mono.Cecil.MetadataType.UInt16:
                     il.Emit(OpCodes.Ldind_U2);
                     break;
-                case TypeCode.Int16:
+                case Mono.Cecil.MetadataType.Int16:
                     il.Emit(OpCodes.Ldind_I2);
                     break;
-                case TypeCode.UInt32:
+                case Mono.Cecil.MetadataType.UInt32:
                     il.Emit(OpCodes.Ldind_U4);
                     break;
-                case TypeCode.Int32:
+                case Mono.Cecil.MetadataType.Int32:
                     il.Emit(OpCodes.Ldind_I4);
                     break;
-                case TypeCode.Int64:
-                case TypeCode.UInt64:
+                case Mono.Cecil.MetadataType.Int64:
+                case Mono.Cecil.MetadataType.UInt64:
                     il.Emit(OpCodes.Ldind_I8);
                     break;
-                case TypeCode.Single:
+                case Mono.Cecil.MetadataType.Single:
                     il.Emit(OpCodes.Ldind_R4);
                     break;
-                case TypeCode.Double:
+                case Mono.Cecil.MetadataType.Double:
                     il.Emit(OpCodes.Ldind_R8);
                     break;
                 default:
@@ -339,58 +361,58 @@ namespace PascalABCCompiler.NETGenerator
             }
         }
 
-        public static void PushLdelem(ILGenerator il, Type elem_type, bool ldobj)
+        public static void PushLdelem(Mono.Cecil.Cil.ILProcessor il, Mono.Cecil.TypeReference elem_type, bool ldobj)
         {
-            switch (Type.GetTypeCode(elem_type))
+            switch (elem_type.MetadataType)
             {
-                case TypeCode.Boolean:
-                case TypeCode.Byte:
+                case Mono.Cecil.MetadataType.Boolean:
+                case Mono.Cecil.MetadataType.Byte:
                     il.Emit(OpCodes.Ldelem_U1);
                     break;
-                case TypeCode.SByte:
+                case Mono.Cecil.MetadataType.SByte:
                     il.Emit(OpCodes.Ldelem_I1);
                     break;
-                case TypeCode.Char:
-                case TypeCode.Int16:
+                case Mono.Cecil.MetadataType.Char:
+                case Mono.Cecil.MetadataType.Int16:
                     il.Emit(OpCodes.Ldelem_I2);
                     break;
-                case TypeCode.UInt16:
+                case Mono.Cecil.MetadataType.UInt16:
                     il.Emit(OpCodes.Ldelem_U2);
                     break;
-                case TypeCode.Int32:
+                case Mono.Cecil.MetadataType.Int32:
                     il.Emit(OpCodes.Ldelem_I4);
                     break;
-                case TypeCode.UInt32:
+                case Mono.Cecil.MetadataType.UInt32:
                     il.Emit(OpCodes.Ldelem_U4);
                     break;
-                case TypeCode.Int64:
-                case TypeCode.UInt64:
+                case Mono.Cecil.MetadataType.Int64:
+                case Mono.Cecil.MetadataType.UInt64:
                     il.Emit(OpCodes.Ldelem_I8);
                     break;
-                case TypeCode.Single:
+                case Mono.Cecil.MetadataType.Single:
                     il.Emit(OpCodes.Ldelem_R4);
                     break;
-                case TypeCode.Double:
+                case Mono.Cecil.MetadataType.Double:
                     il.Emit(OpCodes.Ldelem_R8);
                     break;
                 default:
                     if (IsPointer(elem_type))
                         il.Emit(OpCodes.Ldelem_I);
                     else if (elem_type.IsGenericParameter)
-                        il.Emit(OpCodes.Ldelem, elem_type);
+                        il.Emit(OpCodes.Ldelem_Any, elem_type);
                     else
                         if (elem_type.IsValueType)//если это структура
                         {
                             il.Emit(OpCodes.Ldelema, elem_type);//почему a?
                             // проверки нужно ли заменять тип возвр. знач. метода get_val массива на указатель
-                            if (ldobj || !(elem_type != TypeFactory.VoidType && elem_type.IsValueType && !TypeFactory.IsStandType(elem_type)))
+                            if (ldobj || !(elem_type.FullName != TypeFactory.VoidType.FullName && elem_type.IsValueType && !TypeFactory.IsStandType(elem_type)))
                                 il.Emit(OpCodes.Ldobj, elem_type);
                         }
                         else il.Emit(OpCodes.Ldelem_Ref);
                     break;
             }           
         }
-        public static void LdcIntConst(ILGenerator il, int e)
+        public static void LdcIntConst(Mono.Cecil.Cil.ILProcessor il, int e)
         {
             switch (e)
             {
@@ -417,42 +439,42 @@ namespace PascalABCCompiler.NETGenerator
             }
         }
 
-        public static void PushLdc(ILGenerator il, Type elem_type, object value)
+        public static void PushLdc(Mono.Cecil.Cil.ILProcessor il, Mono.Cecil.TypeReference elem_type, object value)
         {
-            switch (Type.GetTypeCode(elem_type))
+            switch (elem_type.MetadataType)
             {
-                case TypeCode.Boolean:
-                case TypeCode.Byte:
+                case Mono.Cecil.MetadataType.Boolean:
+                case Mono.Cecil.MetadataType.Byte:
                     //il.Emit(OpCodes.Ldc_I4_S, Convert.ToByte(value));
                     LdcIntConst(il, Convert.ToByte(value));
                     break;
-                case TypeCode.SByte:
+                case Mono.Cecil.MetadataType.SByte:
                     LdcIntConst(il, Convert.ToSByte(value));
                     //il.Emit(OpCodes.Ldc_I4_S, Convert.ToSByte(value));
                     break;
-                case TypeCode.Char:
+                case Mono.Cecil.MetadataType.Char:
                     LdcIntConst(il, Convert.ToChar(value));
                     //il.Emit(OpCodes.Ldc_I4, Convert.ToChar(value));
                     break;
-                case TypeCode.Int16:
+                case Mono.Cecil.MetadataType.Int16:
                     LdcIntConst(il, Convert.ToInt32(value));
                     //il.Emit(OpCodes.Ldc_I4, Convert.ToInt32(value));
                     break;
-                case TypeCode.UInt16:
+                case Mono.Cecil.MetadataType.UInt16:
                     LdcIntConst(il, Convert.ToUInt16(value));
                     //il.Emit(OpCodes.Ldc_I4, Convert.ToUInt16(value));
                     break;
-                case TypeCode.Int32:
+                case Mono.Cecil.MetadataType.Int32:
                     LdcIntConst(il,Convert.ToInt32(value));
                     break;
-                case TypeCode.UInt32:
+                case Mono.Cecil.MetadataType.UInt32:
                     LdcIntConst(il, (Int32)Convert.ToUInt32(value));
                     //il.Emit(OpCodes.Ldc_I4, Convert.ToUInt32(value));
                     break;
-                case TypeCode.Int64:
+                case Mono.Cecil.MetadataType.Int64:
                     il.Emit(OpCodes.Ldc_I8, Convert.ToInt64(value));
                     break;
-                case TypeCode.UInt64:
+                case Mono.Cecil.MetadataType.UInt64:
                     UInt64 UInt64 = Convert.ToUInt64(value);
                     if (UInt64 > Int64.MaxValue)
                     {
@@ -470,13 +492,13 @@ namespace PascalABCCompiler.NETGenerator
                     else
                         il.Emit(OpCodes.Ldc_I8, Convert.ToInt64(value));
                     break;
-                case TypeCode.Single:
+                case Mono.Cecil.MetadataType.Single:
                     il.Emit(OpCodes.Ldc_R4, (Single)value);
                     break;
-                case TypeCode.Double:
+                case Mono.Cecil.MetadataType.Double:
                     il.Emit(OpCodes.Ldc_R8, (Double)value);
                     break;
-                case TypeCode.String:
+                case Mono.Cecil.MetadataType.String:
                     il.Emit(OpCodes.Ldstr, (string)value);
                     break;
                 default:
@@ -489,7 +511,7 @@ namespace PascalABCCompiler.NETGenerator
             }
         }
 
-        public static void PushCast(ILGenerator il, Type tp, Type from_value_type)
+        public static void PushCast(Mono.Cecil.Cil.ILProcessor il, Mono.Cecil.TypeReference tp, Mono.Cecil.TypeReference from_value_type)
         {
             if (IsPointer(tp))
                 return;
@@ -504,9 +526,10 @@ namespace PascalABCCompiler.NETGenerator
                 il.Emit(OpCodes.Castclass, tp);
         }
         
-        public static LocalBuilder CreateLocalAndLoad(ILGenerator il, Type tp)
+        public static Mono.Cecil.Cil.VariableDefinition CreateLocalAndLoad(Mono.Cecil.Cil.ILProcessor il, Mono.Cecil.TypeReference tp)
         {
-            LocalBuilder lb = il.DeclareLocal(tp);
+            Mono.Cecil.Cil.VariableDefinition lb = new Mono.Cecil.Cil.VariableDefinition(tp);
+            il.Body.Variables.Add(lb);
             il.Emit(OpCodes.Stloc, lb);
             if (tp.IsValueType)
                 il.Emit(OpCodes.Ldloca, lb);
@@ -515,24 +538,26 @@ namespace PascalABCCompiler.NETGenerator
             return lb;
         }
         
-        public static LocalBuilder CreateLocal(ILGenerator il, Type tp)
+        public static Mono.Cecil.Cil.VariableDefinition CreateLocal(Mono.Cecil.Cil.ILProcessor il, Mono.Cecil.TypeReference tp)
         {
-            LocalBuilder lb = il.DeclareLocal(tp);
+            Mono.Cecil.Cil.VariableDefinition lb = new Mono.Cecil.Cil.VariableDefinition(tp);
+            il.Body.Variables.Add(lb);
             il.Emit(OpCodes.Stloc, lb);
             return lb;
         }
         
-        public static LocalBuilder CreateLocalAndLdloca(ILGenerator il, Type tp)
+        public static Mono.Cecil.Cil.VariableDefinition CreateLocalAndLdloca(Mono.Cecil.Cil.ILProcessor il, Mono.Cecil.TypeReference tp)
         {
-            LocalBuilder lb = il.DeclareLocal(tp);
+            Mono.Cecil.Cil.VariableDefinition lb = new Mono.Cecil.Cil.VariableDefinition(tp);
+            il.Body.Variables.Add(lb);
             il.Emit(OpCodes.Stloc, lb);
             il.Emit(OpCodes.Ldloca, lb);
             return lb;
         }
 
-        public static void CreateBoundedArray(ILGenerator il, FieldBuilder fb, TypeInfo ti)
+        public static void CreateBoundedArray(Mono.Cecil.Cil.ILProcessor il, Mono.Cecil.FieldDefinition fb, TypeInfo ti)
         {
-            Label lbl = il.DefineLabel();
+            Mono.Cecil.Cil.Instruction lbl = il.Create(OpCodes.Nop);
             if (fb.IsStatic)
                 il.Emit(OpCodes.Ldsfld, fb);
             else
@@ -550,19 +575,19 @@ namespace PascalABCCompiler.NETGenerator
                 il.Emit(OpCodes.Stsfld, fb);
             else
                 il.Emit(OpCodes.Stfld, fb);
-            il.MarkLabel(lbl);
+            il.Append(lbl);
         }
 
-        public static void CreateBoudedArray(ILGenerator il, LocalBuilder lb, TypeInfo ti)
+        public static void CreateBoudedArray(Mono.Cecil.Cil.ILProcessor il, Mono.Cecil.Cil.VariableDefinition lb, TypeInfo ti)
         {
-            Label lbl = il.DefineLabel();
+            Mono.Cecil.Cil.Instruction lbl = il.Create(OpCodes.Nop);
             il.Emit(OpCodes.Ldloc, lb);
             il.Emit(OpCodes.Ldnull);
             il.Emit(OpCodes.Ceq);
             il.Emit(OpCodes.Brfalse, lbl);
             il.Emit(OpCodes.Newobj, ti.def_cnstr);
             il.Emit(OpCodes.Stloc, lb);
-            il.MarkLabel(lbl);
+            il.Append(lbl);
         }
 
         public static bool IsBoundedArray(TypeInfo ti)
@@ -570,26 +595,26 @@ namespace PascalABCCompiler.NETGenerator
             return ti.arr_fld != null;
         }
 
-        public static void FixField(MethodBuilder mb, FieldBuilder fb, TypeInfo ti)
+        public static void FixField(Mono.Cecil.MethodDefinition mb, Mono.Cecil.FieldDefinition fb, TypeInfo ti)
         {
-            ILGenerator il = mb.GetILGenerator();
+            Mono.Cecil.Cil.ILProcessor il = mb.Body.GetILProcessor();
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldfld, fb);
-            if (fb.FieldType == TypeFactory.StringType)
+            if (fb.FieldType.FullName == module.TypeSystem.String.FullName)
             {
                 il.Emit(OpCodes.Ldc_I4, (int)GCHandleType.Pinned);
-                il.Emit(OpCodes.Call, TypeFactory.GCHandleAllocPinned);
+                il.Emit(OpCodes.Call, module.ImportReference(TypeFactory.GCHandleAllocPinned));
             }
             else
             {
-                il.Emit(OpCodes.Call, TypeFactory.GCHandleAlloc);
+                il.Emit(OpCodes.Call, module.ImportReference(TypeFactory.GCHandleAlloc));
             }
             il.Emit(OpCodes.Pop);
         }
 
-        public static void CloneField(MethodBuilder clone_meth, FieldBuilder fb, TypeInfo ti)
+        public static void CloneField(Mono.Cecil.MethodDefinition clone_meth, Mono.Cecil.FieldDefinition fb, TypeInfo ti)
         {
-            ILGenerator il = clone_meth.GetILGenerator();
+            Mono.Cecil.Cil.ILProcessor il = clone_meth.Body.GetILProcessor();
             il.Emit(OpCodes.Ldloca_S, (byte)0);
             il.Emit(OpCodes.Ldarg_0);
             if (ti.clone_meth != null)
@@ -607,9 +632,9 @@ namespace PascalABCCompiler.NETGenerator
             il.Emit(OpCodes.Stfld, fb);
         }
 
-        public static void AssignField(MethodBuilder ass_meth, FieldBuilder fb, TypeInfo ti)
+        public static void AssignField(Mono.Cecil.MethodDefinition ass_meth, Mono.Cecil.FieldDefinition fb, TypeInfo ti)
         {
-            ILGenerator il = ass_meth.GetILGenerator();
+            Mono.Cecil.Cil.ILProcessor il = ass_meth.Body.GetILProcessor();
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldarga_S, (byte)1);
             if (ti.clone_meth != null)
@@ -627,20 +652,20 @@ namespace PascalABCCompiler.NETGenerator
             il.Emit(OpCodes.Stfld, fb);
         }
 
-        public static void PushTypeOf(ILGenerator il, Type tp)
+        public static void PushTypeOf(Mono.Cecil.Cil.ILProcessor il, Mono.Cecil.TypeReference tp)
         {
             il.Emit(OpCodes.Ldtoken, tp);
-            il.EmitCall(OpCodes.Call, TypeFactory.GetTypeFromHandleMethod, null);
+            il.Emit(OpCodes.Call, module.ImportReference(TypeFactory.GetTypeFromHandleMethod));
         }
         
-        public static bool IsPointer(Type tp)
+        public static bool IsPointer(Mono.Cecil.TypeReference tp)
         {
             return tp.IsPointer; /*|| tp==TypeFactory.IntPtr; INTPTR TODO*/
         }
 
-        public static bool IsEnum(Type tp)
+        public static bool IsEnum(Mono.Cecil.TypeReference tp)
         {
-            return !tp.IsGenericType && !tp.IsGenericTypeDefinition && tp.IsEnum;
+            return !(tp is Mono.Cecil.TypeSpecification) && tp.Resolve().IsEnum;
         }
         
     }
