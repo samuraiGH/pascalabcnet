@@ -557,7 +557,6 @@ begin
   IsValid := valid;
 end;
 
-
 constructor IntColumn.Create(name: string);
 begin
   inherited Create;
@@ -567,34 +566,9 @@ begin
   IsValid := nil;
 end;
 
-{procedure IntColumn.AppendInvalid;
-begin
-  Data := Data + [0];
-
-  if IsValid = nil then
-  begin
-    IsValid := new boolean[Length(Data) - 1];
-    for var i := 0 to IsValid.Length - 1 do
-      IsValid[i] := true;
-  end;
-
-  IsValid := IsValid + [false];
-end;}
-
-{procedure IntColumn.AppendFromCursor(cur: DataFrameCursor; colIndex: integer);
-begin
-  if cur.IsValid(colIndex) then
-  begin
-    Data := Data + [cur.Int(colIndex)];
-    if IsValid <> nil then 
-      IsValid := IsValid + [true];
-  end
-  else AppendInvalid; 
-end;}
-
 function IntColumn.TryGetNumericValue(i: integer; var value: real): boolean;
 begin
-  if not IsValid[i] then
+  if (IsValid <> nil) and not IsValid[i] then
     exit(false);
 
   value := Data[i];
@@ -620,34 +594,9 @@ begin
 end;
 
 
-{procedure FloatColumn.AppendFromCursor(cur: DataFrameCursor; colIndex: integer);
-begin
-  if cur.IsValid(colIndex) then
-  begin
-    Data := Data + [cur.Float(colIndex)];
-    if IsValid <> nil then 
-      IsValid := IsValid + [true];
-  end
-  else AppendInvalid;
-end;}
-
-{procedure FloatColumn.AppendInvalid;
-begin
-  Data := Data + [0.0];
-
-  if IsValid = nil then
-  begin
-    IsValid := new boolean[Length(Data) - 1];
-    for var i := 0 to IsValid.Length - 1 do
-      IsValid[i] := true;
-  end;
-
-  IsValid := IsValid + [false];
-end;}
-
 function FloatColumn.TryGetNumericValue(i: integer; var value: real): boolean;
 begin
-  if not IsValid[i] then
+  if (IsValid <> nil) and not IsValid[i] then
     exit(false);
 
   value := Data[i];
@@ -673,31 +622,6 @@ begin
   IsValid := nil;
 end;
 
-{procedure StrColumn.AppendFromCursor(cur: DataFrameCursor; colIndex: integer);
-begin
-  if cur.IsValid(colIndex) then
-  begin
-    Data := Data + [cur.Str(colIndex)];
-    if IsValid <> nil then 
-      IsValid := IsValid + [true];
-  end
-  else AppendInvalid;
-end;}
-
-{procedure StrColumn.AppendInvalid;
-begin
-  Data := Data + [''];
-
-  if IsValid = nil then
-  begin
-    IsValid := new boolean[Length(Data) - 1];
-    for var i := 0 to IsValid.Length - 1 do
-      IsValid[i] := true;
-  end;
-
-  IsValid := IsValid + [false];
-end;}
-
 function StrColumn.TryGetNumericValue(i: integer; var value: real): boolean;
 begin
   exit(false);
@@ -705,7 +629,7 @@ end;
 
 function BoolColumn.TryGetNumericValue(i: integer; var value: real): boolean;
 begin
-  if not IsValid[i] then
+  if (IsValid <> nil) and not IsValid[i] then
     exit(false);
 
   if Data[i] then

@@ -35,6 +35,8 @@ type
     function Transform(df: DataFrame): DataFrame;
     /// Выполняет Fit и Transform последовательно
     function FitTransform(df: DataFrame): DataFrame;
+    
+    function Clone: IPreprocessor;
   end;
 
 /// Кодирует строковый категориальный столбец в целочисленные индексы (0,1,2,...).
@@ -62,6 +64,8 @@ type
     function ToString: string; override;
     
     property ColumnName: string read col;
+    
+    function Clone: IPreprocessor;
   end;
 
 /// Кодирует строковый категориальный столбец в набор бинарных (one-hot) столбцов
@@ -89,6 +93,8 @@ type
     function ToString: string; override;
     
     property ColumnName: string read col;
+    
+    function Clone: IPreprocessor;
   end;
 
   ImputeStrategy = (isMean, isConstant, isMedian);
@@ -123,6 +129,8 @@ type
     function ToString: string; override;
     
     property Columns: array of string read cols;
+    
+    function Clone: IPreprocessor;
   end;
   
 
@@ -194,6 +202,9 @@ const
     'Массив констант не задан или имеет неверный размер!!Constants array is null or has invalid length';
   ER_IMPUTER_STRATEGY_NOT_SUPPORTED =
     'Стратегия импутации {0} не поддерживается!!Imputation strategy {0} is not supported';
+  ER_UNSUPPORTED_IMPUTE_STRATEGY =
+    'Неподдерживаемая стратегия заполнения: {0}!!Unsupported impute strategy: {0}';    
+    
   
 //-----------------------------
 //        LabelEncoder
@@ -287,7 +298,7 @@ begin
 
   foreach var src in df.GetColumns do
     if src.Info.Name <> col then
-      res.AddColumnView(src)
+      res.AddColumnAlias(src)
     else
       res.AddIntColumn(col, data, valid);
 
@@ -305,6 +316,10 @@ begin
   Result := 'LabelEncoder(' + col + ')';
 end;
 
+function LabelEncoder.Clone: IPreprocessor;
+begin
+  Result := new LabelEncoder(col);
+end;
 //-----------------------------
 //        OneHotEncoder
 //-----------------------------
@@ -412,6 +427,11 @@ end;
 function OneHotEncoder.ToString: string;
 begin
   Result := 'OneHotEncoder(column=' + col + ')';
+end;
+
+function OneHotEncoder.Clone: IPreprocessor;
+begin
+  Result := new OneHotEncoder(col);
 end;
 
 //-----------------------------
@@ -546,8 +566,10 @@ begin
   for var i := 0 to cols.Length - 1 do
   begin
     var name := cols[i];
-    var idx := df.Schema.IndexOf(name);
-    var ct := df.Schema.ColumnTypeAt(idx);
+
+    // --- ВАЖНО: используем актуальную схему
+    var idx := res.Schema.IndexOf(name);
+    var ct := res.Schema.ColumnTypeAt(idx);
 
     if not (ct in [ColumnType.ctInt, ColumnType.ctFloat]) then
       Error(ER_IMPUTER_COLUMN_NOT_NUMERIC, name);
@@ -571,12 +593,19 @@ begin
         if ct = ColumnType.ctInt then
         begin
           var k: integer;
-          try
-            k := integer(v);
-          except
-            on e: Exception do
+
+          if v is integer then
+            k := integer(v)
+          else if v is real then
+          begin
+            var r := real(v);
+            var ir := Round(r);
+            if Abs(r - ir) > 1e-9 then
               Error(ER_IMPUTER_CONSTANT_TYPE_MISMATCH, name);
-          end;
+            k := ir;
+          end
+          else
+            Error(ER_IMPUTER_CONSTANT_TYPE_MISMATCH, name);
 
           res := res.ReplaceColumnInt(
             name,
@@ -599,7 +628,7 @@ begin
           );
         end;
       end;
-      
+
       isMedian:
       begin
         var m := medians[i];
@@ -607,7 +636,7 @@ begin
           name,
           c -> (if c.IsValid(idx) then c.Float(idx) else m)
         );
-      end;      
+      end;
 
       else
         Error(ER_IMPUTER_STRATEGY_NOT_SUPPORTED, strategy);
@@ -648,6 +677,26 @@ begin
 
     else
       Result := 'Imputer(strategy=unknown, columns=' + colsStr + ')';
+  end;
+end;
+
+function Imputer.Clone: IPreprocessor;
+begin
+  case strategy of
+    ImputeStrategy.isMean:
+      Result := new Imputer(cols);
+
+    ImputeStrategy.isMedian:
+      Result := new Imputer(ImputeStrategy.isMedian, cols);
+
+    ImputeStrategy.isConstant:
+      begin
+        var val := if (constants <> nil) and (constants.Length > 0) then constants[0] else nil;
+        Result := new Imputer(val, cols);
+      end;
+
+    else
+      Error(ER_UNSUPPORTED_IMPUTE_STRATEGY, strategy);
   end;
 end;
 

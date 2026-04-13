@@ -115,9 +115,10 @@ type
     
     function GetColumn(i: integer): Column;
 
-    /// Добавляет в DataFrame столбец-представление (view),
-    /// использующий те же данные, что и исходный столбец
-    procedure AddColumnView(src: Column);
+    /// Добавляет в DataFrame столбец-синоним,
+    /// разделяющий те же массивы данных и валидности с исходным столбцом.
+    /// Изменение данных повлияет на все DataFrame, использующие этот столбец.
+    procedure AddColumnAlias(src: Column);
     
     function ExtendSchema(name: string; colType: ColumnType; isCategorical: boolean): DataFrameSchema;
     
@@ -164,12 +165,16 @@ type
     procedure AddBoolColumn(name: string; data: array of boolean; valid: array of boolean := nil);
     
     /// Возвращает данные целочисленного столбца по имени
+    /// Не изменяйте их, иначе DataFrame будет повреждён
     function GetIntColumn(name: string): array of integer;
     /// Возвращает данные вещественного столбца по имени
+    /// Не изменяйте их, иначе DataFrame будет повреждён
     function GetFloatColumn(name: string): array of real;
     /// Возвращает данные строкового столбца по имени
+    /// Не изменяйте их, иначе DataFrame будет повреждён
     function GetStrColumn(name: string): array of string;
     /// Возвращает данные логического столбца по имени
+    /// Не изменяйте их, иначе DataFrame будет повреждён
     function GetBoolColumn(name: string): array of boolean;
     
     /// Вычисляет сумму значений столбца по индексу
@@ -224,13 +229,24 @@ type
     /// Возвращает статистику по всем числовым столбцам
     function DescribeAll: Dictionary<string, DescribeStats>; 
     
-    /// Группирует данные по столбцу по индексу
+    /// Группирует данные по столбцу по индексу.
+    /// Поддерживаемые типы ключей: integer, string, boolean.
+    /// Вещественные столбцы (float) не поддерживаются из-за численной нестабильности.
     function GroupBy(colIndex: integer): IGroupByContext; 
-    /// Группирует данные по столбцу по имени
+    
+    /// Группирует данные по столбцу по имени.
+    /// Поддерживаемые типы ключей: integer, string, boolean.
+    /// Вещественные столбцы (float) не поддерживаются из-за численной нестабильности.
     function GroupBy(colName: string): IGroupByContext; 
-    /// Группирует данные по нескольким столбцам по индексам
+    
+    /// Группирует данные по нескольким столбцам по индексам.
+    /// Все столбцы-ключи должны иметь тип integer, string или boolean.
+    /// Использование float-столбцов в качестве ключей не поддерживается.
     function GroupBy(colIndices: array of integer): IGroupByContext; 
-    /// Группирует данные по нескольким столбцам по именам
+    
+    /// Группирует данные по нескольким столбцам по именам.
+    /// Все столбцы-ключи должны иметь тип integer, string или boolean.
+    /// Использование float-столбцов в качестве ключей не поддерживается.
     function GroupBy(colNames: array of string): IGroupByContext; 
     
     /// Возвращает первые n строк 
@@ -585,9 +601,11 @@ const
     'Индекс строки вне диапазона!!Row index is out of range';
   ER_UNSUPPORTED_COLUMN_TYPE = 
     'Неподдерживаемый тип столбца!!Unsupported column type';
-    
+  ER_JOIN_FLOAT_KEY_NOT_SUPPORTED =
+    'Соединение по вещественным ключам не поддерживается из-за ошибок точности!!Join on float keys is not supported due to precision issues';
+  
 type
-  GroupKey = class
+  GroupKey = class(IComparable<GroupKey>)
   private
     fValues: array of object;
   public
@@ -596,6 +614,8 @@ type
     function GetHashCode: integer; override;
   
     property Values: array of object read fValues;
+    
+    function CompareTo(other: GroupKey): integer;
   end;
   
   /// Класс для группировки данных
@@ -1155,7 +1175,10 @@ end;
 
 function DataFrame.LeftJoinSingleKeyFloat(other: DataFrame; leftKey, rightKey: integer): DataFrame;
 begin
-  var index := new Dictionary<real, List<integer>>;
+  Error(ER_JOIN_FLOAT_KEY_NOT_SUPPORTED);
+  Result := nil;
+  
+  {var index := new Dictionary<real, List<integer>>;
 
   var rcur := other.GetCursor;
   while rcur.MoveNext do
@@ -1203,7 +1226,7 @@ begin
     end;
   end;
 
-  Result := BuildLeftJoinResult(Self, other, leftIdx, rightIdx, leftKey, rightKey);
+  Result := BuildLeftJoinResult(Self, other, leftIdx, rightIdx, leftKey, rightKey);}
 end;
 
 function DataFrame.LeftJoinSingleKeyStr(other: DataFrame; leftKey, rightKey: integer): DataFrame;
@@ -1798,7 +1821,9 @@ end;
 
 function DataFrame.JoinInnerSingleKeyFloat(other: DataFrame; leftKey, rightKey: integer): DataFrame;
 begin
-  var index := new Dictionary<real, List<integer>>;
+  Error(ER_JOIN_FLOAT_KEY_NOT_SUPPORTED);
+  Result := nil;
+  {var index := new Dictionary<real, List<integer>>;
 
   var rcur := other.GetCursor;
   while rcur.MoveNext do
@@ -1834,7 +1859,7 @@ begin
         end;
     end;
 
-  Result := BuildJoinResult(Self, other, leftIdx, rightIdx, leftKey, rightKey);
+  Result := BuildJoinResult(Self, other, leftIdx, rightIdx, leftKey, rightKey);}
 end;
 
 function DataFrame.JoinInnerSingleKeyStr(other: DataFrame; leftKey, rightKey: integer): DataFrame;
@@ -2057,7 +2082,7 @@ begin
 
   Result := Self.Join(tmp, leftKeys, kind);
   
-  AssertSchemaConsistent;
+  Result.AssertSchemaConsistent;
 end;
 
 procedure DataFrame.RebuildSchema;
@@ -2536,7 +2561,9 @@ begin
       acc += d * d;
     end;
 
-  var variance := acc / cnt;
+  var variance :=
+    if cnt > 1 then acc / (cnt - 1)
+    else 0.0;
 
   Result := (mean, variance);
 end;
@@ -2601,7 +2628,12 @@ begin
 
   Result.Count := cnt;
   Result.Mean := mean;
-  Result.Std := Sqrt(acc / cnt);
+  
+  if cnt > 1 then
+    Result.Std := Sqrt(acc / (cnt - 1))
+  else
+    Result.Std := 0.0;
+
   Result.Min := mn;
   Result.Max := mx;
 end;
@@ -2778,7 +2810,7 @@ begin
   
       var cmp: integer;
       case columns[colIndices[i]].Info.ColType of
-        ctInt:   cmp := a.IntVals[i] - b.IntVals[i];
+        ctInt:   cmp := a.IntVals[i].CompareTo(b.IntVals[i]);
         ctFloat: cmp := a.FloatVals[i].CompareTo(b.FloatVals[i]);
         ctStr:   cmp := a.StrVals[i].CompareTo(b.StrVals[i]);
         ctBool:  cmp := a.BoolVals[i].CompareTo(b.BoolVals[i]);
@@ -2982,7 +3014,7 @@ begin
   ));
 
   Result := res;
-  AssertSchemaConsistent;
+  Result.AssertSchemaConsistent;
 end;
 
 function DataFrame.Select(colIndices: array of integer): DataFrame;
@@ -3090,7 +3122,7 @@ begin
 
   Result := res;
 
-  AssertSchemaConsistent;
+  Result.AssertSchemaConsistent;
 end;
 
 function DataFrame.Drop(colIndices: array of integer): DataFrame;
@@ -3267,7 +3299,7 @@ begin
   res.SetSchema(ExtendSchema(name, ctInt, false));
 
   Result := res;
-  AssertSchemaConsistent;
+  Result.AssertSchemaConsistent;
 end;
 
 function DataFrame.WithColumnFloat(name: string; f: DataFrameCursor -> real): DataFrame;
@@ -3308,7 +3340,7 @@ begin
   res.SetSchema(ExtendSchema(name, ctFloat, false));
 
   Result := res;
-  AssertSchemaConsistent;
+  Result.AssertSchemaConsistent;
 end;
 
 function DataFrame.WithColumnStr(name: string; f: DataFrameCursor -> string): DataFrame;
@@ -3349,7 +3381,7 @@ begin
   res.SetSchema(ExtendSchema(name, ctStr, false));
 
   Result := res;
-  AssertSchemaConsistent;
+  Result.AssertSchemaConsistent;
 end;
 
 function DataFrame.WithColumnBool(name: string; f: DataFrameCursor -> boolean): DataFrame;
@@ -3390,7 +3422,7 @@ begin
   res.SetSchema(ExtendSchema(name, ctBool, false));
 
   Result := res;
-  AssertSchemaConsistent;
+  Result.AssertSchemaConsistent;
 end;
 
 function DataFrame.ExtendSchema(
@@ -3482,9 +3514,21 @@ begin
 
   for var i := 0 to columns.Count - 1 do
     if i <> colIndex then
-      res.AddColumnView(columns[i])
+      res.AddColumnAlias(columns[i])
     else
       res.AddFloatColumn(colName, data, valid);
+    
+  // --- ИСПРАВЛЕНИЕ СХЕМЫ ---
+  var newTypes := Copy(fSchema.Types);
+  newTypes[colIndex] := ColumnType.ctFloat;
+  
+  var newSchema := new DataFrameSchema(
+    fSchema.ColumnNames,
+    newTypes,
+    fSchema.CategoricalFlags
+  );    
+
+  res.SetSchema(newSchema);
 
   Result := res;
   Result.AssertSchemaConsistent;
@@ -3523,9 +3567,21 @@ begin
   var res := new DataFrame;
   for var i := 0 to columns.Count - 1 do
     if i <> colIndex then
-      res.AddColumnView(columns[i])
+      res.AddColumnAlias(columns[i])
     else
       res.AddIntColumn(colName, data, valid);
+
+  // --- ИСПРАВЛЕНИЕ СХЕМЫ ---
+  var newTypes := Copy(fSchema.Types);
+  newTypes[colIndex] := ColumnType.ctInt;
+  
+  var newSchema := new DataFrameSchema(
+    fSchema.ColumnNames,
+    newTypes,
+    fSchema.CategoricalFlags
+  );
+  
+  res.SetSchema(newSchema);
 
   Result := res;
   Result.AssertSchemaConsistent;
@@ -3567,7 +3623,7 @@ begin
 
   var res := new DataFrame;
   for var i := 0 to columns.Count - 1 do
-    res.AddColumnView(columns[i]);
+    res.AddColumnAlias(columns[i]);
 
   res.AddIntColumn(name, data, valid);
 
@@ -3622,12 +3678,9 @@ begin
     end;
   end;
 
-  // КЛЮЧЕВОЕ: schema НЕ меняется
-  res.SetSchema(fSchema);
-
   Result := res;
 
-  AssertSchemaConsistent;
+  Result.AssertSchemaConsistent;
 end;
 
 function DataFrame.TransformFloatColumn(name: string; f: real -> real): DataFrame;
@@ -3677,12 +3730,9 @@ begin
     end;
   end;
 
-  // schema просто копируется
-  res.SetSchema(fSchema);
-
   Result := res;
 
-  AssertSchemaConsistent;
+  Result.AssertSchemaConsistent;
 end;
 
 function DataFrame.TransformStrColumn(name: string; f: string -> string): DataFrame;
@@ -3732,12 +3782,9 @@ begin
     end;
   end;
 
-  // schema НЕ меняется
-  res.SetSchema(fSchema);
-
   Result := res;
 
-  AssertSchemaConsistent;
+  Result.AssertSchemaConsistent;
 end;
 
 function DataFrame.TransformBoolColumn(name: string; f: boolean -> boolean): DataFrame;
@@ -3787,12 +3834,9 @@ begin
     end;
   end;
 
-  // schema просто копируется
-  res.SetSchema(fSchema);
-
   Result := res;
 
-  AssertSchemaConsistent;
+  Result.AssertSchemaConsistent;
 end;
 
 function DataFrame.TakeRows(indices: array of integer): DataFrame;
@@ -4256,7 +4300,7 @@ end;
 
 /// Добавляет в DataFrame столбец-представление (view),
 /// использующий те же данные, что и исходный столбец
-procedure DataFrame.AddColumnView(src: Column);
+procedure DataFrame.AddColumnAlias(src: Column);
 begin
   case src.Info.ColType of
     ctInt:
@@ -4309,7 +4353,7 @@ begin
       res.AddIntColumn(name, data, fc.IsValid);
     end
     else
-      res.AddColumnView(col);
+      res.AddColumnAlias(col);
   end;
 
   // пересобираем schema (меняются ТИПЫ)
@@ -4421,6 +4465,31 @@ begin
   end;
 
   Result := h;
+end;
+
+function GroupKey.CompareTo(other: GroupKey): integer;
+begin
+  for var i := 0 to Values.Length - 1 do
+  begin
+    var a := Values[i];
+    var b := other.Values[i];
+
+    var cmp := 0;
+
+    if a is integer then
+      cmp := integer(a).CompareTo(integer(b))
+    else if a is string then
+      cmp := string(a).CompareTo(string(b))
+    else if a is boolean then
+      cmp := boolean(a).CompareTo(boolean(b))
+    else
+      raise new Exception('Unsupported GroupKey type');
+
+    if cmp <> 0 then
+      exit(cmp);
+  end;
+
+  Result := 0;
 end;
 
 //-----------------------------
@@ -4621,6 +4690,7 @@ begin
       case df.columns[keyColumn].Info.ColType of
         ctInt: key := cursor.Int(keyColumn);
         ctStr: key := cursor.Str(keyColumn);
+        ctBool: key := cursor.Bool(keyColumn);
         else Error(ER_GROUPBY_UNSUPPORTED_KEY_TYPE, df.columns[keyColumn].Info.ColType);
       end;
 
@@ -4658,6 +4728,7 @@ begin
         case df.columns[c].Info.ColType of
           ctInt: values[i] := cursor.Int(c);
           ctStr: values[i] := cursor.Str(c);
+          ctBool: values[i] := cursor.Bool(c);
           else Error(ER_GROUPBY_UNSUPPORTED_KEY_TYPE, df.columns[c].Info.ColType);
         end;
       end;
@@ -4689,29 +4760,51 @@ begin
 
   if singleKey then
   begin
-    var keys := groups1.Select(kvp -> kvp.Key).ToArray;
-    var counts := new integer[keys.Length];
-
-    for var i := 0 to keys.Length - 1 do
-      counts[i] := groups1[keys[i]].Count;
-
     var col := source.columns[keyColumn];
     var keyName := col.Info.Name;
-
-    if col.Info.ColType = ctInt then
-    begin
-      res.AddIntColumn(keyName, keys.Select(k -> integer(k)).ToArray, nil);
-      types.Add(ctInt);
-    end
-    else
-    begin
-      res.AddStrColumn(keyName, keys.Select(k -> string(k)).ToArray, nil);
-      types.Add(ctStr);
+  
+    var keys: array of object;
+  
+    case col.Info.ColType of
+      ctInt:
+        keys := groups1.Keys.OrderBy(k -> integer(k)).Select(k -> object(k)).ToArray;
+      ctStr:
+        keys := groups1.Keys.OrderBy(k -> string(k)).Select(k -> object(k)).ToArray;
+      ctBool:
+        keys := groups1.Keys.OrderBy(k -> boolean(k)).Select(k -> object(k)).ToArray;
+      else
+        Error(ER_GROUPBY_UNSUPPORTED_KEY_TYPE);
     end;
-
+  
+    var counts := new integer[keys.Length];
+  
+    for var i := 0 to keys.Length - 1 do
+      counts[i] := groups1[keys[i]].Count;
+  
+    // добавление ключевого столбца
+    case col.Info.ColType of
+      ctInt:
+      begin
+        res.AddIntColumn(keyName, keys.Select(k -> integer(k)).ToArray, nil);
+        types.Add(ctInt);
+      end;
+  
+      ctStr:
+      begin
+        res.AddStrColumn(keyName, keys.Select(k -> string(k)).ToArray, nil);
+        types.Add(ctStr);
+      end;
+  
+      ctBool:
+      begin
+        res.AddBoolColumn(keyName, keys.Select(k -> boolean(k)).ToArray, nil);
+        types.Add(ctBool);
+      end;
+    end;
+  
     names.Add(keyName);
     cats.Add(true); // ключ — categorical
-
+  
     res.AddIntColumn('count', counts, nil);
     names.Add('count');
     types.Add(ctInt);
@@ -4719,7 +4812,7 @@ begin
   end
   else
   begin
-    var keys := groupsN.Select(kvp -> kvp.Key).ToArray;
+    var keys := groupsN.Keys.OrderBy(k -> k).ToArray;
     var counts := new integer[keys.Length];
 
     for var i := 0 to keys.Length - 1 do
@@ -4731,15 +4824,27 @@ begin
       var col := source.columns[ci];
       var colName := col.Info.Name;
 
-      if col.Info.ColType = ctInt then
-      begin
-        res.AddIntColumn(colName, keys.Select(key -> integer(key.Values[k])).ToArray, nil);
-        types.Add(ctInt);
-      end
-      else
-      begin
-        res.AddStrColumn(colName, keys.Select(key -> string(key.Values[k])).ToArray, nil);
-        types.Add(ctStr);
+      case col.Info.ColType of
+        ctInt:
+        begin
+          res.AddIntColumn(colName, keys.Select(key -> integer(key.Values[k])).ToArray, nil);
+          types.Add(ctInt);
+        end;
+      
+        ctStr:
+        begin
+          res.AddStrColumn(colName, keys.Select(key -> string(key.Values[k])).ToArray, nil);
+          types.Add(ctStr);
+        end;
+      
+        ctBool:
+        begin
+          res.AddBoolColumn(colName, keys.Select(key -> boolean(key.Values[k])).ToArray, nil);
+          types.Add(ctBool);
+        end;
+      
+        else
+          Error(ER_GROUPBY_UNSUPPORTED_KEY_TYPE);
       end;
 
       names.Add(colName);
@@ -4821,7 +4926,15 @@ begin
 
   if singleKey then
   begin
-    var keys := groups1.Select(kvp -> kvp.Key).ToArray;
+    var col := source.columns[keyColumn];
+    var keys: array of object;
+    
+    case col.Info.ColType of
+      ctInt: keys := groups1.Keys.OrderBy(k -> integer(k)).Select(k -> object(k)).ToArray;
+      ctStr: keys := groups1.Keys.OrderBy(k -> string(k)).Select(k -> object(k)).ToArray;
+      ctBool: keys := groups1.Keys.OrderBy(k -> boolean(k)).Select(k -> object(k)).ToArray;
+      else Error(ER_GROUPBY_UNSUPPORTED_KEY_TYPE);
+    end;
 
     for var i := 0 to keys.Length - 1 do
     begin
@@ -4834,7 +4947,7 @@ begin
   end
   else
   begin
-    var keys := groupsN.Select(kvp -> kvp.Key).ToArray;
+    var keys := groupsN.Keys.OrderBy(k -> k).ToArray;
 
     for var i := 0 to keys.Length - 1 do
     begin
@@ -4961,9 +5074,34 @@ begin
   var keysN: array of GroupKey := nil;
 
   if singleKey then
-    keys1 := groups1.Keys.ToArray
+  begin
+    var col := source.columns[keyColumn];
+  
+    case col.Info.ColType of
+      ctInt:
+        keys1 := groups1.Keys
+          .OrderBy(k -> integer(k))
+          .Select(k -> object(k))
+          .ToArray;
+  
+      ctStr:
+        keys1 := groups1.Keys
+          .OrderBy(k -> string(k))
+          .Select(k -> object(k))
+          .ToArray;
+  
+      ctBool:
+        keys1 := groups1.Keys
+          .OrderBy(k -> boolean(k))
+          .Select(k -> object(k))
+          .ToArray;
+  
+      else
+        Error(ER_GROUPBY_UNSUPPORTED_KEY_TYPE);
+    end;
+  end
   else
-    keysN := groupsN.Keys.ToArray;
+    keysN := groupsN.Keys.OrderBy(k -> k).ToArray;
 
   // ----------------------------
   // 4. Аллокации только под нужные агрегаты
@@ -5199,7 +5337,8 @@ begin
     types.ToArray,
     cats.ToArray
   ));
-
+  
+  res.AssertSchemaConsistent;
   Result := res;
 end;
 
@@ -5261,6 +5400,7 @@ begin
     end;
   end;
 
+  res.AssertSchemaConsistent;
   Result := res;
 end;
 
@@ -5273,29 +5413,47 @@ begin
   var ix := df.ColumnIndex(colX);
   var iy := df.ColumnIndex(colY);
 
-  var mx := df.Mean(ix);
-  var my := df.Mean(iy);
-  var sx := df.Std(ix);
-  var sy := df.Std(iy);
-
-  if (sx = 0) or (sy = 0) then
-    Error(ER_ZERO_VARIANCE);
-
   var cur := df.GetCursor;
-  var sum := 0.0;
+  var sumX := 0.0;
+  var sumY := 0.0;
   var cnt := 0;
 
+  // pass 1: mean по пересечению
   while cur.MoveNext do
     if cur.IsValid(ix) and cur.IsValid(iy) then
     begin
-      sum += (cur.Float(ix) - mx) * (cur.Float(iy) - my);
+      sumX += cur.Float(ix);
+      sumY += cur.Float(iy);
       cnt += 1;
     end;
 
   if cnt = 0 then
     Error(ER_NO_VALID_PAIRS);
 
-  Result := sum / (cnt * sx * sy);
+  var mx := sumX / cnt;
+  var my := sumY / cnt;
+
+  // pass 2: covariance и variance
+  cur := df.GetCursor;
+  var acc := 0.0;
+  var accX := 0.0;
+  var accY := 0.0;
+
+  while cur.MoveNext do
+    if cur.IsValid(ix) and cur.IsValid(iy) then
+    begin
+      var dx := cur.Float(ix) - mx;
+      var dy := cur.Float(iy) - my;
+
+      acc += dx * dy;
+      accX += dx * dx;
+      accY += dy * dy;
+    end;
+
+  if (accX = 0) or (accY = 0) then
+    Error(ER_ZERO_VARIANCE);
+
+  Result := acc / Sqrt(accX * accY);
 end;
 
 static function Statistics.CorrelationMatrix(df: DataFrame): DataFrame;
@@ -5333,7 +5491,12 @@ begin
       if i = j then
         data[i] := 1.0
       else
-        data[i] := Correlation(df, names[i], names[j]);
+        try
+          data[i] := Correlation(df, names[i], names[j]);
+        except
+          on e: Exception do
+            data[i] := real.NaN;
+        end;
 
     res.AddFloatColumn(names[j], data, nil);
 
@@ -5355,8 +5518,9 @@ end;
 static function Statistics.Standardize(df: DataFrame; colName: string): DataFrame;
 begin
   var idx := df.ColumnIndex(colName);
-  var mean := df.Mean(idx);
-  var std := df.Std(idx);
+
+  var (mean, variance) := df.MeanVariance(idx);
+  var std := Sqrt(variance);
 
   if std = 0 then
     Error(ER_ZERO_STD_STANDARDIZE);
@@ -5369,6 +5533,8 @@ end;
 static function Statistics.StandardizeAll(df: DataFrame): DataFrame;
 begin
   var res := new DataFrame;
+  var oldSchema := df.Schema;
+  
   var cur := df.GetCursor;
 
   // 1. заранее считаем mean/std для всех числовых столбцов
@@ -5381,8 +5547,9 @@ begin
     var t := df.GetColumnType(i);
     if t in [ColumnType.ctInt, ColumnType.ctFloat] then
     begin
-      means[i] := df.Mean(i);
-      stds[i] := df.Std(i);
+      var (mean, variance) := df.MeanVariance(i);
+      means[i] := mean;
+      stds[i] := Sqrt(variance);
       if stds[i] = 0 then
         Error(ER_ZERO_STD_COLUMN, df.fSchema.ColumnNames[i]);
       isNumeric[i] := true;
@@ -5395,7 +5562,7 @@ begin
     if isNumeric[i] then
       res.AddFloatColumn(df.fSchema.ColumnNames[i], new real[df.RowCount], nil)
     else
-      res.AddColumnView(df.columns[i]); // private helper
+      res.AddColumnAlias(df.GetColumn(i)); 
   end;
 
   // 3. заполняем данные
@@ -5409,25 +5576,22 @@ begin
       var col := FloatColumn(res.columns[i]);
   
       if cur.IsValid(i) then
-      begin
-        col.Data[row] := (cur.Float(i) - means[i]) / stds[i];
-        if col.IsValid <> nil then
-          col.IsValid[row] := true;
-      end
+        col.Data[row] := (cur.Float(i) - means[i]) / stds[i]
       else
-      begin
-        // первый NA → создаём IsValid
-        if col.IsValid = nil then
-        begin
-          col.IsValid := new boolean[df.RowCount];
-          for var r := 0 to row - 1 do
-            col.IsValid[r] := true;
-        end;
         col.IsValid[row] := false;
-      end;
+
     end;
     row += 1;
   end;
+  
+  var names := oldSchema.ColumnNames;
+  var cats := oldSchema.CategoricalFlags;
+
+  var types := new ColumnType[names.Length];
+  for var i := 0 to names.Length - 1 do
+    types[i] := ctFloat;
+
+  res.SetSchema(new DataFrameSchema(names, types, cats));
   
   Result := res;
 end;
@@ -5443,14 +5607,17 @@ begin
   Result := df.ReplaceColumnFloat(colName, cur ->
   begin
     if not cur.IsValid(idx) then
-      Error(ER_INVALID_VALUE_IN_COLUMN, colName);
-    Result := (cur.Float(idx) - mn) / (mx - mn);
+      Result := real.NaN
+    else
+      Result := (cur.Float(idx) - mn) / (mx - mn);
   end);
 end;
 
 static function Statistics.NormalizeAll(df: DataFrame): DataFrame;
 begin
   var res := new DataFrame;
+  var oldSchema := df.Schema;
+  
   var cur := df.GetCursor;
 
   // 1. заранее считаем min/max для всех числовых столбцов
@@ -5478,7 +5645,7 @@ begin
     if isNumeric[i] then
       res.AddFloatColumn(df.fSchema.ColumnNames[i], new real[df.RowCount], nil)
     else
-      res.AddColumnView(df.columns[i]); // private helper
+      res.AddColumnAlias(df.GetColumn(i)); 
   end;
 
   // 3. заполняем данные
@@ -5511,6 +5678,15 @@ begin
     end;
     row += 1;
   end;
+  
+  var names := oldSchema.ColumnNames;
+  var cats := oldSchema.CategoricalFlags;
+
+  var types := new ColumnType[names.Length];
+  for var i := 0 to names.Length - 1 do
+    types[i] := ctFloat;
+
+  res.SetSchema(new DataFrameSchema(names, types, cats));
 
   Result := res;
 end;
@@ -5940,13 +6116,49 @@ begin
   var autoCat: array of boolean := nil;
 
   var first := true;
+  
+  // временные буферы для определения числа колонок
+  var tmpStarts := new integer[64];
+  var tmpLens := new integer[64];
+  var actualCount: integer;
+  var unclosedQuote: boolean;
+  
+  ScanFieldsQuoted(linesArray[0], delimiter, tmpStarts, tmpLens, actualCount, unclosedQuote);
+  
+  if unclosedQuote then
+    if strict then
+      Error(ER_CSV_UNCLOSED_QUOTE);
+  
+  // число колонок
+  var maxColumns := 256;
+  
+  var starts := new integer[maxColumns];
+  var lens := new integer[maxColumns];
+  
   foreach var line in linesArray index inferRead do
   begin
     if inferRead >= inferLimit then break;
     
     if first then
     begin
-      var parts := line.Split(delimiter);
+      ScanFieldsQuoted(line, delimiter, starts, lens, actualCount, unclosedQuote);
+
+      if unclosedQuote then
+        if strict then
+          Error(ER_CSV_UNCLOSED_QUOTE);
+      
+      var parts := new string[actualCount];
+      
+      for var j := 0 to actualCount - 1 do
+      begin
+        var s := line.Substring(starts[j] - 1, lens[j]);
+      
+        // снять кавычки, если есть
+        if (s.Length >= 2) and (s[1] = '"') and (s[s.Length] = '"') then
+          s := s.Substring(1, s.Length - 2);
+      
+        parts[j] := s;
+      end;
   
       if hasHeader then
       begin
@@ -6046,7 +6258,24 @@ begin
       if hasHeader then continue;
     end;
   
-    var parts := line.Split(delimiter);
+    ScanFieldsQuoted(line, delimiter, starts, lens, actualCount, unclosedQuote);
+
+    if unclosedQuote then
+      if strict then
+        Error(ER_CSV_UNCLOSED_QUOTE);
+    
+    var parts := new string[actualCount];
+    
+    for var j := 0 to actualCount - 1 do
+    begin
+      var s := line.Substring(starts[j]-1, lens[j]);
+    
+      // снять кавычки, если есть
+      if (s.Length >= 2) and (s[1] = '"') and (s[s.Length] = '"') then
+        s := s.Substring(1, s.Length - 2);
+    
+      parts[j] := s;
+    end;
   
     if parts.Length <> originalColCount then
       if strict then
@@ -6164,9 +6393,6 @@ begin
       strData[j] := new string[rowCount];
   end;
   
-  var starts := new integer[originalColCount];
-  var lens := new integer[originalColCount];
-  
   var row := 0;
   first := true;
   foreach var line in linesArray do
@@ -6176,9 +6402,6 @@ begin
       first := false;
       if hasHeader then continue;
     end;
-    
-    var actualCount: integer;
-    var unclosedQuote: boolean;
     
     ScanFieldsQuoted(line, delimiter, starts, lens, actualCount, unclosedQuote);
     
@@ -6423,6 +6646,20 @@ begin
   );
 end;
 
+function EscapeCsv(s: string; delimiter: char): string;
+begin
+  if (s.Contains(delimiter)) or
+     (s.Contains('"')) or
+     (s.Contains(#10)) or
+     (s.Contains(#13)) then
+  begin
+    s := s.Replace('"', '""');
+    Result := '"' + s + '"';
+  end
+  else
+    Result := s;
+end;
+
 static procedure CsvSaver.Save(df: DataFrame; filename: string;
   delimiter: char; header: boolean);
 begin
@@ -6438,10 +6675,10 @@ begin
     // header
     if header then
     begin
-      for var i := 0 to n-1 do
+      for var i := 0 to n - 1 do
       begin
         if i > 0 then w.Write(delimiter);
-        w.Write(schema.NameAt(i));
+        w.Write(EscapeCsv(schema.NameAt(i), delimiter));
       end;
       w.WriteLine;
     end;
@@ -6460,7 +6697,7 @@ begin
         case schema.ColumnTypeAt(i) of
           ctInt:   w.Write(cur.Int(i));
           ctFloat: w.Write(cur.Float(i));
-          ctStr:   w.Write(cur.Str(i));
+          ctStr:   w.Write(EscapeCsv(cur.Str(i), delimiter));
           ctBool:  w.Write(cur.Bool(i));
         end;
       end;
