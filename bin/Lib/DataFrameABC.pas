@@ -1,6 +1,11 @@
-﻿// Copyright (c) Ivan Bondarev, Stanislav Mikhalkovich (for details please see \doc\copyright.txt)
-// This code is distributed under the GNU LGPL (for details please see \doc\license.txt)
-// DataFrameABC v.1.1
+﻿// =============================================================
+// СТАТИСТИЧЕСКОЕ СОГЛАШЕНИЕ (DataFrame)
+//
+// Используется выборочная дисперсия (деление на n - 1),
+// как принято в описательной статистике.
+//
+// См. статистическую политику в модуле MLABC.
+// =============================================================
 
 /// Стандартный модуль для работы с табличными данными (датасетами) 
 /// !! DataFrame module for tabular data processing
@@ -95,7 +100,6 @@ type
     function GetColumn(name: string): Column;
     
     function CloneWithCopiedColumns: DataFrame;
-    static procedure EnsureValidArray(var valid: array of boolean; rowCount, filledCount: integer);
   public
     /// Создает пустой DataFrame
     constructor Create;
@@ -692,17 +696,17 @@ begin
     if li >= 0 then
     begin
       data[i] := leftCol.Data[li];
-      valid[i] := if leftCol.IsValid = nil then true else leftCol.IsValid[li];
+      valid[i] := leftCol.IsValid[li];
     end
     else if ri >= 0 then
     begin
       data[i] := rightCol.Data[ri];
-      valid[i] := if rightCol.IsValid = nil then true else rightCol.IsValid[ri];
+      valid[i] := rightCol.IsValid[ri];
     end
     else
     begin
       data[i] := 0;
-      valid[i] := false;
+      valid[i] := False;
     end;
   end;
 
@@ -729,17 +733,17 @@ begin
     if li >= 0 then
     begin
       data[i] := leftCol.Data[li];
-      valid[i] := if leftCol.IsValid = nil then true else leftCol.IsValid[li];
+      valid[i] := leftCol.IsValid[li];
     end
     else if ri >= 0 then
     begin
       data[i] := rightCol.Data[ri];
-      valid[i] := if rightCol.IsValid = nil then true else rightCol.IsValid[ri];
+      valid[i] := rightCol.IsValid[ri];
     end
     else
     begin
       data[i] := 0.0;
-      valid[i] := false;
+      valid[i] := False;
     end;
   end;
 
@@ -766,17 +770,17 @@ begin
     if li >= 0 then
     begin
       data[i] := leftCol.Data[li];
-      valid[i] := if leftCol.IsValid = nil then true else leftCol.IsValid[li];
+      valid[i] := leftCol.IsValid[li];
     end
     else if ri >= 0 then
     begin
       data[i] := rightCol.Data[ri];
-      valid[i] := if rightCol.IsValid = nil then true else rightCol.IsValid[ri];
+      valid[i] := rightCol.IsValid[ri];
     end
     else
     begin
       data[i] := '';
-      valid[i] := false;
+      valid[i] := False;
     end;
   end;
 
@@ -803,12 +807,12 @@ begin
     if li >= 0 then
     begin
       data[i] := leftCol.Data[li];
-      valid[i] := if leftCol.IsValid = nil then true else leftCol.IsValid[li];
+      valid[i] := leftCol.IsValid[li];
     end
     else if ri >= 0 then
     begin
       data[i] := rightCol.Data[ri];
-      valid[i] := if rightCol.IsValid = nil then true else rightCol.IsValid[ri];
+      valid[i] := rightCol.IsValid[ri];
     end
     else
     begin
@@ -838,12 +842,12 @@ begin
     if j < 0 then
     begin
       data[i] := 0;
-      valid[i] := false;
+      valid[i] := False;
     end
     else
     begin
       data[i] := src.Data[j];
-      valid[i] := if src.IsValid = nil then true else src.IsValid[j];
+      valid[i] := src.IsValid[j];
     end;
   end;
 
@@ -868,12 +872,12 @@ begin
     if j < 0 then
     begin
       data[i] := 0.0;
-      valid[i] := false;
+      valid[i] := False;
     end
     else
     begin
       data[i] := src.Data[j];
-      valid[i] := if src.IsValid = nil then true else src.IsValid[j];
+      valid[i] := src.IsValid[j];
     end;
   end;
 
@@ -898,12 +902,12 @@ begin
     if j < 0 then
     begin
       data[i] := '';
-      valid[i] := false;
+      valid[i] := False;
     end
     else
     begin
       data[i] := src.Data[j];
-      valid[i] := if src.IsValid = nil then true else src.IsValid[j];
+      valid[i] := src.IsValid[j];
     end;
   end;
 
@@ -927,13 +931,13 @@ begin
 
     if j < 0 then
     begin
-      data[i] := false;
-      valid[i] := false;
+      data[i] := False;
+      valid[i] := False;
     end
     else
     begin
       data[i] := src.Data[j];
-      valid[i] := if src.IsValid = nil then true else src.IsValid[j];
+      valid[i] := src.IsValid[j];
     end;
   end;
 
@@ -2223,21 +2227,10 @@ end;
 
 procedure DataFrame.AddIntColumn(name: string; data: array of integer; valid: array of boolean);
 begin
-  if (columns.Count > 0) and (data.Length <> RowCount) then
+  if (columns.Count > 0) and (Length(data) <> RowCount) then
     DimensionError(ER_ADD_COLUMN_ROW_MISMATCH);
 
-  var c := new IntColumn;
-  c.Info := new ColumnInfo(name, ctInt);
-  c.Data := data;
-
-  if valid = nil then
-    c.IsValid := [True] * data.Length
-  else
-  begin
-    if valid.Length <> data.Length then
-      DimensionError(ER_COLUMN_VALID_LENGTH_MISMATCH);
-    c.IsValid := valid;
-  end;
+  var c := new IntColumn(name, data, valid);
 
   columns.Add(c);
   RebuildSchema;
@@ -2245,21 +2238,10 @@ end;
 
 procedure DataFrame.AddFloatColumn(name: string; data: array of real; valid: array of boolean);
 begin
-  if (columns.Count > 0) and (data.Length <> RowCount) then
+  if (columns.Count > 0) and (Length(data) <> RowCount) then
     DimensionError(ER_ADD_COLUMN_ROW_MISMATCH);
 
-  var c := new FloatColumn;
-  c.Info := new ColumnInfo(name, ctFloat);
-  c.Data := data;
-
-  if valid = nil then
-    c.IsValid := [True] * data.Length
-  else
-  begin
-    if valid.Length <> data.Length then
-            DimensionError(ER_COLUMN_VALID_LENGTH_MISMATCH);
-    c.IsValid := valid;
-  end;
+  var c := new FloatColumn(name, data, valid);
 
   columns.Add(c);
   RebuildSchema;
@@ -2267,21 +2249,10 @@ end;
 
 procedure DataFrame.AddStrColumn(name: string; data: array of string; valid: array of boolean);
 begin
-  if (columns.Count > 0) and (data.Length <> RowCount) then
+  if (columns.Count > 0) and (Length(data) <> RowCount) then
     DimensionError(ER_ADD_COLUMN_ROW_MISMATCH);
 
-  var c := new StrColumn;
-  c.Info := new ColumnInfo(name, ctStr);
-  c.Data := data;
-
-  if valid = nil then
-    c.IsValid := [True] * data.Length
-  else
-  begin
-    if valid.Length <> data.Length then
-      DimensionError(ER_COLUMN_VALID_LENGTH_MISMATCH);
-    c.IsValid := valid;
-  end;
+  var c := new StrColumn(name, data, valid);
 
   columns.Add(c);
   RebuildSchema;
@@ -2295,26 +2266,14 @@ end;
 
 procedure DataFrame.AddBoolColumn(name: string; data: array of boolean; valid: array of boolean);
 begin
-  if (columns.Count > 0) and (data.Length <> RowCount) then
+  if (columns.Count > 0) and (Length(data) <> RowCount) then
     DimensionError(ER_ADD_COLUMN_ROW_MISMATCH);
 
-  var c := new BoolColumn;
-  c.Info := new ColumnInfo(name, ctBool);
-  c.Data := data;
-
-  if valid = nil then
-    c.IsValid := [True] * data.Length
-  else
-  begin
-    if valid.Length <> data.Length then
-      DimensionError(ER_COLUMN_VALID_LENGTH_MISMATCH);
-    c.IsValid := valid;
-  end;
+  var c := new BoolColumn(name, data, valid);
 
   columns.Add(c);
   RebuildSchema;
 end;
-
 
 procedure DataFrame.CheckColumnIndex(colIndex: integer);
 begin
@@ -2917,17 +2876,13 @@ begin
       var src := IntColumn(col);
 
       var data := new integer[newCount];
-      var valid: array of boolean := nil;
-
-      if src.IsValid <> nil then
-        valid := new boolean[newCount];
+      var valid := new boolean[newCount];
 
       for var k := 0 to newCount - 1 do
       begin
         var i := mask[k];
         data[k] := src.Data[i];
-        if valid <> nil then
-          valid[k] := src.IsValid[i];
+        valid[k] := src.IsValid[i];
       end;
 
       res.AddIntColumn(src.Info.Name, data, valid);
@@ -2939,17 +2894,13 @@ begin
       var src := FloatColumn(col);
 
       var data := new real[newCount];
-      var valid: array of boolean := nil;
-
-      if src.IsValid <> nil then
-        valid := new boolean[newCount];
+      var valid := new boolean[newCount];
 
       for var k := 0 to newCount - 1 do
       begin
         var i := mask[k];
         data[k] := src.Data[i];
-        if valid <> nil then
-          valid[k] := src.IsValid[i];
+        valid[k] := src.IsValid[i];
       end;
 
       res.AddFloatColumn(src.Info.Name, data, valid);
@@ -2961,17 +2912,13 @@ begin
       var src := StrColumn(col);
 
       var data := new string[newCount];
-      var valid: array of boolean := nil;
-
-      if src.IsValid <> nil then
-        valid := new boolean[newCount];
+      var valid := new boolean[newCount];
 
       for var k := 0 to newCount - 1 do
       begin
         var i := mask[k];
         data[k] := src.Data[i];
-        if valid <> nil then
-          valid[k] := src.IsValid[i];
+        valid[k] := src.IsValid[i];
       end;
 
       res.AddStrColumn(src.Info.Name, data, valid);
@@ -2983,17 +2930,13 @@ begin
       var src := BoolColumn(col);
 
       var data := new boolean[newCount];
-      var valid: array of boolean := nil;
-
-      if src.IsValid <> nil then
-        valid := new boolean[newCount];
+      var valid := new boolean[newCount];
 
       for var k := 0 to newCount - 1 do
       begin
         var i := mask[k];
         data[k] := src.Data[i];
-        if valid <> nil then
-          valid[k] := src.IsValid[i];
+        valid[k] := src.IsValid[i];
       end;
 
       res.AddBoolColumn(src.Info.Name, data, valid);
@@ -3251,16 +3194,6 @@ begin
   end;
 end;
 
-static procedure DataFrame.EnsureValidArray(var valid: array of boolean; rowCount, filledCount: integer);
-begin
-  if valid = nil then
-  begin
-    valid := new boolean[rowCount];
-    for var j := 0 to filledCount - 1 do
-      valid[j] := true;
-  end;
-end;
-
 function DataFrame.WithColumnInt(name: string; f: DataFrameCursor -> integer): DataFrame;
 begin
   if fSchema.HasColumn(name) then
@@ -3269,7 +3202,7 @@ begin
   var res := CloneWithCopiedColumns;
 
   var data := new integer[RowCount];
-  var valid: array of boolean := nil;
+  var valid := new boolean[RowCount];
 
   var cur := GetCursor;
   var i := 0;
@@ -3282,15 +3215,13 @@ begin
       on e: Exception do
       begin
         data[i] := 0;
-        EnsureValidArray(valid, RowCount, i);
-        valid[i] := false;
+        valid[i] := False;
         i += 1;
         continue;
       end;
     end;
 
-    if valid <> nil then
-      valid[i] := true;
+    valid[i] := True;
 
     i += 1;
   end;
@@ -3310,7 +3241,7 @@ begin
   var res := CloneWithCopiedColumns;
 
   var data := new real[RowCount];
-  var valid: array of boolean := nil;
+  var valid := new boolean[RowCount];
 
   var cur := GetCursor;
   var i := 0;
@@ -3323,15 +3254,13 @@ begin
       on e: Exception do
       begin
         data[i] := 0.0;
-        EnsureValidArray(valid, RowCount, i);
-        valid[i] := false;
+        valid[i] := False;
         i += 1;
         continue;
       end;
     end;
 
-    if valid <> nil then
-      valid[i] := true;
+    valid[i] := True;
 
     i += 1;
   end;
@@ -3351,7 +3280,7 @@ begin
   var res := CloneWithCopiedColumns;
 
   var data := new string[RowCount];
-  var valid: array of boolean := nil;
+  var valid := new boolean[RowCount];
 
   var cur := GetCursor;
   var i := 0;
@@ -3364,15 +3293,13 @@ begin
       on e: Exception do
       begin
         data[i] := nil;
-        EnsureValidArray(valid, RowCount, i);
-        valid[i] := false;
+        valid[i] := False;
         i += 1;
         continue;
       end;
     end;
 
-    if valid <> nil then
-      valid[i] := true;
+    valid[i] := True;
 
     i += 1;
   end;
@@ -3392,7 +3319,7 @@ begin
   var res := CloneWithCopiedColumns;
 
   var data := new boolean[RowCount];
-  var valid: array of boolean := nil;
+  var valid := new boolean[RowCount];
 
   var cur := GetCursor;
   var i := 0;
@@ -3404,16 +3331,14 @@ begin
     except
       on e: Exception do
       begin
-        data[i] := false;
-        EnsureValidArray(valid, RowCount, i);
-        valid[i] := false;
+        data[i] := False;
+        valid[i] := False;
         i += 1;
         continue;
       end;
     end;
 
-    if valid <> nil then
-      valid[i] := true;
+    valid[i] := True;
 
     i += 1;
   end;
@@ -3458,7 +3383,7 @@ begin
   var rowCount := RowCount;
 
   var data := new real[rowCount];
-  var valid: array of boolean := nil;
+  var valid := new boolean[rowCount];
 
   var cur := GetCursor;
   var row := 0;
@@ -3469,14 +3394,6 @@ begin
     if not cur.IsValid(colIndex) then
     begin
       data[row] := 0.0;
-
-      if valid = nil then
-      begin
-        valid := new boolean[rowCount];
-        for var j := 0 to row - 1 do
-          valid[j] := true;
-      end;
-
       valid[row] := false;
       row += 1;
       continue;
@@ -3489,22 +3406,13 @@ begin
       on e: Exception do
       begin
         data[row] := 0.0;
-
-        if valid = nil then
-        begin
-          valid := new boolean[rowCount];
-          for var j := 0 to row - 1 do
-            valid[j] := true;
-        end;
-
-        valid[row] := false;
+        valid[row] := False;
         row += 1;
         continue;
       end;
     end;
 
-    if valid <> nil then
-      valid[row] := true;
+    valid[row] := True;
 
     row += 1;
   end;
@@ -3540,7 +3448,7 @@ begin
   var rowCount := RowCount;
 
   var data := new integer[rowCount];
-  var valid: array of boolean := nil;
+  var valid := new boolean[rowCount];
 
   var cur := GetCursor;
   var row := 0;
@@ -3548,17 +3456,12 @@ begin
   begin
     try
       data[row] := f(cur);
-      if valid <> nil then valid[row] := true;
+      valid[row] := True;
     except
       on e: Exception do
       begin
         data[row] := 0;
-        if valid = nil then
-        begin
-          valid := new boolean[rowCount];
-          for var j := 0 to row - 1 do valid[j] := true;
-        end;
-        valid[row] := false;
+        valid[row] := False;
       end;
     end;
     row += 1;
@@ -3597,7 +3500,7 @@ begin
 
   var rowCount := RowCount;
   var data := new integer[rowCount];
-  var valid: array of boolean := nil;
+  var valid := new boolean[rowCount];
 
   var cur := GetCursor;
   var row := 0;
@@ -3605,17 +3508,12 @@ begin
   begin
     try
       data[row] := f(cur);
-      if valid <> nil then valid[row] := true;
+      valid[row] := True;
     except
       on e: Exception do
       begin
         data[row] := 0;
-        if valid = nil then
-        begin
-          valid := new boolean[rowCount];
-          for var j := 0 to row - 1 do valid[j] := true;
-        end;
-        valid[row] := false;
+        valid[row] := False;
       end;
     end;
     row += 1;
@@ -3863,11 +3761,7 @@ begin
       begin
         var src := IntColumn(col);
         var data := new integer[k];
-        var validSrc := src.IsValid;
-        var validDst: array of boolean := nil;
-
-        if validSrc <> nil then
-          validDst := new boolean[k];
+        var validDst := new boolean[k];
 
         for var j := 0 to k - 1 do
         begin
@@ -3876,15 +3770,8 @@ begin
           if (i < 0) or (i >= RowCount) then
             ArgumentError(ER_ROW_INDEX_OUT_OF_RANGE, i);
 
-          if validSrc = nil then
-            data[j] := src.Data[i]
-          else if validSrc[i] then
-          begin
-            data[j] := src.Data[i];
-            validDst[j] := true;
-          end
-          else
-            validDst[j] := false;
+          data[j] := src.Data[i];
+          validDst[j] := src.IsValid[i];
         end;
 
         res.AddIntColumn(name, data, validDst);
@@ -3894,11 +3781,7 @@ begin
       begin
         var src := FloatColumn(col);
         var data := new real[k];
-        var validSrc := src.IsValid;
-        var validDst: array of boolean := nil;
-
-        if validSrc <> nil then
-          validDst := new boolean[k];
+        var validDst := new boolean[k];
 
         for var j := 0 to k - 1 do
         begin
@@ -3907,15 +3790,8 @@ begin
           if (i < 0) or (i >= RowCount) then
             ArgumentError(ER_ROW_INDEX_OUT_OF_RANGE, i);
 
-          if validSrc = nil then
-            data[j] := src.Data[i]
-          else if validSrc[i] then
-          begin
-            data[j] := src.Data[i];
-            validDst[j] := true;
-          end
-          else
-            validDst[j] := false;
+          data[j] := src.Data[i];
+          validDst[j] := src.IsValid[i];
         end;
 
         res.AddFloatColumn(name, data, validDst);
@@ -3925,11 +3801,7 @@ begin
       begin
         var src := StrColumn(col);
         var data := new string[k];
-        var validSrc := src.IsValid;
-        var validDst: array of boolean := nil;
-
-        if validSrc <> nil then
-          validDst := new boolean[k];
+        var validDst := new boolean[k];
 
         for var j := 0 to k - 1 do
         begin
@@ -3938,15 +3810,8 @@ begin
           if (i < 0) or (i >= RowCount) then
             ArgumentError(ER_ROW_INDEX_OUT_OF_RANGE, i);
 
-          if validSrc = nil then
-            data[j] := src.Data[i]
-          else if validSrc[i] then
-          begin
-            data[j] := src.Data[i];
-            validDst[j] := true;
-          end
-          else
-            validDst[j] := false;
+          data[j] := src.Data[i];
+          validDst[j] := src.IsValid[i];
         end;
 
         res.AddStrColumn(name, data, validDst);
@@ -3956,11 +3821,7 @@ begin
       begin
         var src := BoolColumn(col);
         var data := new boolean[k];
-        var validSrc := src.IsValid;
-        var validDst: array of boolean := nil;
-
-        if validSrc <> nil then
-          validDst := new boolean[k];
+        var validDst := new boolean[k];
 
         for var j := 0 to k - 1 do
         begin
@@ -3969,15 +3830,8 @@ begin
           if (i < 0) or (i >= RowCount) then
             ArgumentError(ER_ROW_INDEX_OUT_OF_RANGE, i);
 
-          if validSrc = nil then
-            data[j] := src.Data[i]
-          else if validSrc[i] then
-          begin
-            data[j] := src.Data[i];
-            validDst[j] := true;
-          end
-          else
-            validDst[j] := false;
+          data[j] := src.Data[i];
+          validDst[j] := src.IsValid[i];
         end;
 
         res.AddBoolColumn(name, data, validDst);
@@ -4305,13 +4159,10 @@ begin
   case src.Info.ColType of
     ctInt:
       AddIntColumn(src.Info.Name, IntColumn(src).Data, IntColumn(src).IsValid);
-
     ctFloat:
       AddFloatColumn(src.Info.Name, FloatColumn(src).Data, FloatColumn(src).IsValid);
-
     ctStr:
       AddStrColumn(src.Info.Name, StrColumn(src).Data, StrColumn(src).IsValid);
-
     ctBool:
       AddBoolColumn(src.Info.Name, BoolColumn(src).Data, BoolColumn(src).IsValid);
   end;
@@ -4559,7 +4410,7 @@ begin
   begin
     var i := indices[j];
 
-    if (valid <> nil) and not valid[i] then
+    if not valid[i] then
       continue;
 
     s += if isInt then dataInt[i] else dataFloat[i];
@@ -4586,7 +4437,7 @@ begin
   begin
     var i := indices[j];
 
-    if (valid <> nil) and not valid[i] then
+    if not valid[i] then
       continue;
 
     s += if isInt then dataInt[i] else dataFloat[i];
@@ -4614,7 +4465,7 @@ begin
   begin
     var i := indices[j];
 
-    if (valid <> nil) and not valid[i] then
+    if not valid[i] then
       continue;
 
     var v := if isInt then dataInt[i] else dataFloat[i];
@@ -4647,7 +4498,7 @@ begin
   begin
     var i := indices[j];
 
-    if (valid <> nil) and not valid[i] then
+    if not valid[i] then
       continue;
 
     var v := if isInt then dataInt[i] else dataFloat[i];
@@ -5578,7 +5429,7 @@ begin
       if cur.IsValid(i) then
         col.Data[row] := (cur.Float(i) - means[i]) / stds[i]
       else
-        col.IsValid[row] := false;
+        col.IsValid[row] := False;
 
     end;
     row += 1;
@@ -5661,20 +5512,11 @@ begin
       if cur.IsValid(i) then
       begin
         col.Data[row] := (cur.Float(i) - mins[i]) / (maxs[i] - mins[i]);
-        if col.IsValid <> nil then
-          col.IsValid[row] := true;
+        col.IsValid[row] := True;
       end
       else
-      begin
         // первый NA → создаём IsValid
-        if col.IsValid = nil then
-        begin
-          col.IsValid := new boolean[df.RowCount];
-          for var r := 0 to row - 1 do
-            col.IsValid[r] := true;
-        end;
-        col.IsValid[row] := false;
-      end;
+        col.IsValid[row] := False;
     end;
     row += 1;
   end;

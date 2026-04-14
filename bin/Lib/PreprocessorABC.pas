@@ -53,11 +53,18 @@ type
     /// Создаёт LabelEncoder для указанного столбца
     constructor Create(column: string);
   
-    /// Определяет множество категорий и сохраняет их коды
+/// Определяет множество категорий столбца и сохраняет их числовое кодирование.
+///   df — таблица данных.
+/// Сохраняет отображение категорий в числовые коды для последующего применения.
+///
+/// Примечание:
+///   • отображение категорий НЕ копируется методом Clone    
     function Fit(df: DataFrame): IPreprocessor;
+    
     /// Заменяет категории их числовыми кодами
     /// Возвращает новый DataFrame
     function Transform(df: DataFrame): DataFrame;
+    
     /// Выполняет Fit и Transform последовательно
     function FitTransform(df: DataFrame): DataFrame;
     
@@ -65,6 +72,15 @@ type
     
     property ColumnName: string read col;
     
+/// Создаёт копию препроцессора с той же конфигурацией.
+///
+/// ВАЖНО:
+///   • Clone копирует только конфигурацию (например, имя столбца)
+///   • Clone НЕ копирует обученное состояние (mapping, статистики и т.п.)
+///
+/// Назначение:
+///   • использование в Pipeline и CrossValidate
+///   • обеспечивает независимое переобучение препроцессоров
     function Clone: IPreprocessor;
   end;
 
@@ -82,8 +98,14 @@ type
     /// Создаёт OneHotEncoder для указанного столбца
     constructor Create(column: string);
   
-    /// Определяет множество категорий столбца
+/// Определяет множество категорий столбца.
+///   df — таблица данных.
+/// Сохраняет категории для последующего преобразования в one-hot представление.
+///
+/// Примечание:
+///   • категории НЕ копируются методом Clone
     function Fit(df: DataFrame): IPreprocessor;
+    
     /// Заменяет столбец набором бинарных столбцов
     /// Возвращает новый DataFrame
     function Transform(df: DataFrame): DataFrame;
@@ -93,7 +115,16 @@ type
     function ToString: string; override;
     
     property ColumnName: string read col;
-    
+
+/// Создаёт копию препроцессора с той же конфигурацией.
+///
+/// ВАЖНО:
+///   • Clone копирует только конфигурацию (например, имя столбца)
+///   • Clone НЕ копирует обученное состояние (mapping, статистики и т.п.)
+///
+/// Назначение:
+///   • использование в Pipeline и CrossValidate
+///   • обеспечивает независимое переобучение препроцессоров    
     function Clone: IPreprocessor;
   end;
 
@@ -118,11 +149,19 @@ type
     /// Создаёт Imputer с константной стратегией заполнения
     constructor Create(value: object; params columns: array of string);
   
-    /// Вычисляет значения для заполнения пропусков
+/// Вычисляет значения для заполнения пропусков.
+///   df — таблица данных.
+/// В зависимости от стратегии вычисляет параметры заполнения
+/// (например, среднее, медиану или константу) для каждого столбца.
+///
+/// Примечание:
+///   • вычисленные параметры НЕ копируются методом Clone
     function Fit(df: DataFrame): IPreprocessor;
+    
     /// Заполняет пропущенные значения в DataFrame
     /// Возвращает новый DataFrame
     function Transform(df: DataFrame): DataFrame;
+    
     /// Выполняет Fit и Transform последовательно
     function FitTransform(df: DataFrame): DataFrame;
     
@@ -130,6 +169,15 @@ type
     
     property Columns: array of string read cols;
     
+/// Создаёт копию препроцессора с той же конфигурацией.
+///
+/// ВАЖНО:
+///   • Clone копирует только конфигурацию (например, имя столбца)
+///   • Clone НЕ копирует обученное состояние (mapping, статистики и т.п.)
+///
+/// Назначение:
+///   • использование в Pipeline и CrossValidate
+///   • обеспечивает независимое переобучение препроцессоров    
     function Clone: IPreprocessor;
   end;
   
@@ -262,7 +310,7 @@ begin
   var n := df.RowCount;
 
   var data := new integer[n];
-  var valid: array of boolean := nil;
+  var valid := new boolean[n];
 
   var cur := df.GetCursor;
   var row := 0;
@@ -270,13 +318,7 @@ begin
   begin
     if not cur.IsValid(idx) then
     begin
-      if valid = nil then
-      begin
-        valid := new boolean[n];
-        for var j := 0 to row - 1 do
-          valid[j] := true;
-      end;
-      valid[row] := false;
+      valid[row] := False;
       data[row] := 0;
     end
     else
@@ -287,8 +329,7 @@ begin
         Error(ER_LABELENCODER_UNSEEN_CATEGORY, s);
 
       data[row] := mapping[s];
-      if valid <> nil then
-        valid[row] := true;
+      valid[row] := True;
     end;
 
     row += 1;
