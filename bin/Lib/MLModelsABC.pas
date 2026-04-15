@@ -4391,7 +4391,8 @@ begin
   fMaxDepth := maxDepth;
   fMinSamplesSplit := minSamplesSplit;
   fMinSamplesLeaf := minSamplesLeaf;
-  fCriterion := if criterion = nil then new GiniCriterion else criterion;
+  
+  fCriterion := criterion;
 
   fRandomSeed := ResolveRandomSeed(seed, fUserProvidedSeed);
   fRng := new System.Random(fRandomSeed);
@@ -4437,6 +4438,9 @@ begin
   // --- encode
   var classes: array of integer;
   var yEncArr := EncodeLabelsInt(yInt, classes);
+  
+  if fCriterion = nil then
+    fCriterion := new GiniCriterion(classes.Length);
 
   if classes.Length < 2 then
     ArgumentError(ER_NEED_AT_LEAST_TWO_CLASSES);
