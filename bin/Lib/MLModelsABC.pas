@@ -355,7 +355,9 @@ type
     fCheckConvergence: boolean;
     fMinImprovement: real;
     
-    fClassLabels: array of string; // В каждой модели классификации
+    fClassLabels: array of string; 
+    
+    fUseFastExp: boolean;
     
     function GetWeights: Matrix;
     function GetIntercept: Vector;
@@ -369,7 +371,8 @@ type
       epochs: integer := 1000;
       tol: real := 1e-6;
       checkConvergence: boolean := true;
-      minImprovement: real := 1e-8
+      minImprovement: real := 1e-8;
+      useFastExp: boolean := True
     );
   
 /// Обучает модель логистической регрессии.
@@ -380,7 +383,7 @@ type
 /// Примечание:
 ///   • обученное состояние модели НЕ копируется методом Clone
     function Fit(X: Matrix; y: Vector): ISupervisedModel;
-  
+    
     /// Возвращает матрицу вероятностей (m x k).
     function PredictProba(X: Matrix): Matrix;
   
@@ -1571,9 +1574,6 @@ type
     fTouched: array of integer;
     fEpoch: integer;
     
-    fSampleIdx: array of integer;
-    fSampleSize: integer;
-
   public
     /// Создаёт классификатор kNN.
     /// k — число ближайших соседей (k > 0).
@@ -1589,14 +1589,22 @@ type
 ///   • обученное состояние модели (обучающая выборка) НЕ копируется методом Clone
     function Fit(X: Matrix; y: Vector): ISupervisedModel; override;
     
-    /// Выполняет предсказание меток классов для объектов X.
-    /// Возвращает вектор предсказанных меток
+/// Выполняет предсказание меток классов для объектов X.
+/// Возвращает вектор предсказанных меток.
+/// Не является потокобезопасным: не вызывать одновременно из нескольких потоков
+/// для одного экземпляра модели.
     function Predict(X: Matrix): Vector; override;
     
+    /// Выполняет предсказание меток классов для объектов X.
+    /// Возвращает массив индексов классов.
+    /// Не является потокобезопасным: не вызывать одновременно из нескольких потоков
+    /// для одного экземпляра модели.
     function PredictLabels(X: Matrix): array of integer;
     
     /// Возвращает матрицу вероятностей размера (nSamples × nClasses).
-    /// Столбцы соответствуют классам в порядке, возвращаемом GetClasses()
+    /// Столбцы соответствуют классам в порядке, возвращаемом GetClasses().
+    /// Не является потокобезопасным: не вызывать одновременно из нескольких потоков
+    /// для одного экземпляра модели.
     function PredictProba(X: Matrix): Matrix;
     
     /// Возвращает массив меток классов в порядке столбцов PredictProba
@@ -1839,7 +1847,7 @@ type
   
 {$endregion Models}
 
-{$region Pipeline}
+{$region MatrixPipeline}
 /// Последовательный конвейер машинного обучения (supervised).
 /// Гарантирует строгий порядок выполнения шагов:
 ///   [преобразователи] → [модель].
@@ -1854,7 +1862,10 @@ type
 ///
 /// Обеспечивает единый интерфейс Fit(X, y) / Predict(X)
 /// и воспроизводимость полного процесса обучения
-  Pipeline = class(ISupervisedModel)
+/// 
+/// MatrixPipeline используется, когда данные уже представлены 
+/// в виде Matrix X и Vector y
+  MatrixPipeline = class(ISupervisedModel)
   private
     fTransformers: List<ITransformer>;
     fModel: ISupervisedModel;
@@ -1870,7 +1881,7 @@ type
     constructor Create;
     
 {
-    // Pipeline.Build используется, когда данные уже представлены
+    // MatrixPipeline.Build используется, когда данные уже представлены
     // в виде числовой матрицы признаков X и вектора целевой переменной y.
     // В этом случае DataFrame и препроцессоры уровня таблицы не требуются.
     //
@@ -1881,7 +1892,7 @@ type
     //  • подбор гиперпараметров
     //  • тестирование моделей
     //
-    // Pipeline объединяет несколько матричных преобразований (ITransformer)
+    // MatrixPipeline объединяет несколько матричных преобразований (ITransformer)
     // и модель (IModel) в единый объект, который можно обучать и использовать
     // для предсказаний.
     //
@@ -1892,13 +1903,13 @@ type
     // перед преобразованием данных в Matrix/Vector.
     
     var pipe1 :=
-      Pipeline.Build(
+      MatrixPipeline.Build(
         new StandardScaler,
         new LogisticRegression
       );
     
     var pipe2 :=
-      Pipeline.Build(
+      MatrixPipeline.Build(
         new StandardScaler,
         new PCATransformer(2),
         new LogisticRegression
@@ -1931,13 +1942,13 @@ type
     ///   сначала преобразователи, затем модель.
     /// Последний шаг обязан быть моделью (IModel).
     /// Возвращает сконструированный конвейер.
-    static function Build(params steps: array of IPipelineStep): Pipeline;
+    static function Build(params steps: array of IPipelineStep): MatrixPipeline;
     
     /// Устанавливает или заменяет модель.
-    function SetModel(m: ISupervisedModel): Pipeline;
+    function SetModel(m: ISupervisedModel): MatrixPipeline;
   
     /// Добавляет преобразование в конец пайплайна
-    function Add(t: ITransformer): Pipeline;
+    function Add(t: ITransformer): MatrixPipeline;
   
 /// Обучает пайплайн на данных.
 ///   X — матрица m × n (m объектов, n признаков).
@@ -1962,6 +1973,7 @@ type
     /// Показывает, был ли пайплайн обучен (вызван метод Fit).
     property IsFitted: boolean read fFitted;
     
+/// Возвращает строковое представление пайплайна.
     function ToString: string; override;
 
 /// Создаёт копию пайплайна с теми же шагами и моделью.
@@ -1979,19 +1991,48 @@ type
     function Name: string := Self.GetType.Name;
   end;
   
-  UPipeline = class(IUnsupervisedModel)
+/// Последовательный конвейер машинного обучения (unsupervised).
+/// Гарантирует строгий порядок выполнения шагов:
+///   [преобразователи].
+///
+/// Поддерживает:
+///   • преобразователи без учёта целевой переменной (unsupervised).
+///
+/// Все преобразователи применяются последовательно к признакам X.
+///
+/// Обеспечивает единый интерфейс Fit(X) / Transform(X)
+/// и воспроизводимость полного процесса преобразования данных.
+///
+/// UMatrixPipeline используется, когда данные уже представлены
+/// в виде Matrix X и отсутствует целевая переменная
+  UMatrixPipeline = class(IUnsupervisedModel)
   private
     fTransformers: List<ITransformer>;
     fModel: IModel;
     fFitted: boolean;
   public
+  /// Создаёт конвейер машинного обучения для заданной модели:
+///   • model — модель, которая будет применена
+///     после последовательного применения всех преобразователей.
+/// Модель должна реализовывать интерфейс IModel (без учёта целевой переменной)
     constructor Create(model: IModel);
+
+/// Создаёт пустой пайплайн (конвейер машинного обучения).
+/// Модель должна быть установлена через SetModel    
     constructor Create;
   
-    static function Build(params steps: array of IPipelineStep): UPipeline;
+/// Строит конвейер машинного обучения из последовательности шагов.
+/// Шаги указываются в порядке выполнения:
+///   сначала преобразователи, затем модель.
+/// Последний шаг обязан быть моделью (IModel).
+/// Возвращает сконструированный конвейер.
+    static function Build(params steps: array of IPipelineStep): UMatrixPipeline;
   
-    function SetModel(m: IModel): UPipeline;
-    function Add(t: ITransformer): UPipeline;
+/// Устанавливает или заменяет модель.
+    function SetModel(m: IModel): UMatrixPipeline;
+    
+/// Добавляет преобразование в конец пайплайна    
+    function Add(t: ITransformer): UMatrixPipeline;
   
 /// Обучает пайплайн на данных.
 ///   X — матрица m × n (m объектов, n признаков).
@@ -2001,11 +2042,30 @@ type
 /// Примечание:
 ///   • обученное состояние пайплайна НЕ копируется методом Clone  
     function Fit(X: Matrix): IUnsupervisedModel;
+    
+/// Применяет последовательность преобразований к данным.
+///   X — матрица m × n (m объектов, n признаков).
+/// Последовательно применяет все трансформеры к данным,
+/// после чего возвращает преобразованную матрицу.
+///
+/// Примечание:
+///   • обученное состояние пайплайна НЕ копируется методом Clone    
     function Transform(X: Matrix): Matrix;
+    
+/// Применяет пайплайн и возвращает результат модели.
+///   X — матрица m × n (m объектов, n признаков).
+/// После применения всех преобразований вызывает модель,
+/// реализующую интерфейс IModel.
+///
+/// Примечание:
+///   • семантика результата зависит от конкретной модели
+///     (например, кластерные метки, оценки и т.д.)    
     function Predict(X: Matrix): Vector;
   
+/// Показывает, был ли пайплайн обучен (вызван метод Fit у шагов пайплайна).  
     property IsFitted: boolean read fFitted;
   
+/// Возвращает строковое представление пайплайна.
     function ToString: string; override;
     
 /// Создаёт копию пайплайна с теми же шагами и моделью.
@@ -2016,13 +2076,13 @@ type
 ///   • Все шаги и модель клонируются через их Clone (config-only)
 ///
 /// Назначение:
-///   • использование в CrossValidate и Pipeline
+///   • использование в CrossValidate и MatrixPipeline
 ///   • обеспечивает независимое переобучение пайплайна    
     function Clone: IModel;
     function Name: string := Self.GetType.Name;
   end;
   
-{$endregion Pipeline}
+{$endregion MatrixPipeline}
   
 {$region Transformers}
 
@@ -2078,7 +2138,7 @@ type
 ///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
 ///
 /// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
+///   • использование в CrossValidate, GridSearch и MatrixPipeline
 ///   • гарантирует независимое переобучение трансформеров
 ///
 /// Примечание:
@@ -2136,7 +2196,7 @@ type
 ///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
 ///
 /// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
+///   • использование в CrossValidate, GridSearch и MatrixPipeline
 ///   • гарантирует независимое переобучение трансформеров
 ///
 /// Примечание:
@@ -2190,7 +2250,7 @@ type
 ///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
 ///
 /// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
+///   • использование в CrossValidate, GridSearch и MatrixPipeline
 ///   • гарантирует независимое переобучение трансформеров
 ///
 /// Примечание:
@@ -2243,7 +2303,7 @@ type
 ///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
 ///
 /// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
+///   • использование в CrossValidate, GridSearch и MatrixPipeline
 ///   • гарантирует независимое переобучение трансформеров
 ///
 /// Примечание:
@@ -2340,7 +2400,7 @@ type
 ///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
 ///
 /// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
+///   • использование в CrossValidate, GridSearch и MatrixPipeline
 ///   • гарантирует независимое переобучение трансформеров
 ///
 /// Примечание:
@@ -2398,7 +2458,7 @@ type
 ///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
 ///
 /// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
+///   • использование в CrossValidate, GridSearch и MatrixPipeline
 ///   • гарантирует независимое переобучение трансформеров
 ///
 /// Примечание:
@@ -3100,7 +3160,7 @@ end;
 //-----------------------------
 
 constructor LogisticRegression.Create(lambda: real; learningRate: real; epochs: integer;
-  tol: real; checkConvergence: boolean; minImprovement: real);
+  tol: real; checkConvergence: boolean; minImprovement: real; useFastExp: boolean);
 begin
   fLambda := lambda;
   fLearningRate := learningRate;
@@ -3109,9 +3169,242 @@ begin
   fTol := tol;
   fCheckConvergence := checkConvergence;
   fMinImprovement := minImprovement;
+  fUseFastExp := useFastExp
 end;
 
+function FastExp(x: real): real;
+begin
+  if x < -5 then exit(0.0);
+  if x > 5 then x := 5;
+
+  Result := 1.0 + x + 0.5*x*x + (1.0/6.0)*x*x*x;
+end;
+
+type RealArr = array of real;
+
 function LogisticRegression.Fit(X: Matrix; y: Vector): ISupervisedModel;
+begin
+  if X = nil then
+    ArgumentNullError(ER_X_NULL);
+
+  if y = nil then
+    ArgumentNullError(ER_Y_NULL);
+
+  if MLConfig.ValidateFiniteInputs then
+  begin
+    CheckXForFit(X);
+    CheckYForFit(y);
+  end;
+
+  if X.RowCount = 0 then
+    ArgumentError(ER_EMPTY_DATASET);
+
+  if X.RowCount <> y.Length then
+    DimensionError(ER_DIM_MISMATCH, X.RowCount, y.Length);
+
+  if fLearningRate <= 0 then
+    ArgumentOutOfRangeError(ER_LEARNING_RATE_INVALID, fLearningRate);
+
+  if fEpochs <= 0 then
+    ArgumentOutOfRangeError(ER_EPOCHS_INVALID, fEpochs);
+
+  if fLambda < 0 then
+    ArgumentOutOfRangeError(ER_LAMBDA_NEGATIVE, fLambda);
+  
+  if fCheckConvergence and (fTol <= 0) then
+    ArgumentOutOfRangeError(ER_TOL_INVALID, fTol);
+  
+  var m := X.RowCount;
+  var p := X.ColCount;
+
+  // --- convert to integer labels
+  var yInt := new integer[m];
+  
+  for var i := 0 to m - 1 do
+  begin
+    var r := y[i];
+    var ir := Round(r);
+  
+    if Abs(r - ir) > 1e-12 then
+      ArgumentError(ER_LABELS_NOT_INTEGER);
+  
+    yInt[i] := ir;
+  end;
+  
+  // --- encode (порядок первого появления)
+  var unique: array of integer;
+  var yEncoded := EncodeLabelsInt(yInt, unique);
+  
+  fClassCount := unique.Length;
+  
+  if fClassCount < 2 then
+    ArgumentError(ER_LOGISTIC_NEED_AT_LEAST_TWO_CLASSES);
+  
+  // --- build mappings
+  fClassToIndex := new Dictionary<integer, integer>;
+  SetLength(fIndexToClass, fClassCount);
+  
+  for var i := 0 to fClassCount - 1 do
+  begin
+    fClassToIndex[unique[i]] := i;
+    fIndexToClass[i] := unique[i];
+  end;
+
+  // --- init
+  fW := new Matrix(p, fClassCount);
+  var scale := 0.01;
+  for var j := 0 to p - 1 do
+    for var k := 0 to fClassCount - 1 do
+      fW.Data[j,k] := (Random - 0.5) * 2 * scale;
+
+  fIntercept := new Vector(fClassCount);
+
+  var prevLoss := real.PositiveInfinity;
+
+  var xRows := X.Data.Rows;
+  var gradW := new RealArr[fClassCount];
+  for var k := 0 to fClassCount - 1 do
+    gradW[k] := new real[p];
+    
+  var gradB := new real[fClassCount];
+    
+  var zi := new real[fClassCount];
+  
+  for var epoch := 1 to fEpochs do
+  begin
+    var WCols := fW.Data.Cols;
+    //var WRows := fW.Data.Rows;
+    
+    var loss := 0.0;
+  
+    // --- zero gradients
+    &Array.Clear(gradB, 0, fClassCount);
+    for var k := 0 to fClassCount - 1 do
+      &Array.Clear(gradW[k], 0, p);
+  
+    // --- one pass: logits -> softmax -> loss -> gradient
+    for var i := 0 to m - 1 do
+    begin
+      var xi := XRows[i];
+      var yi := yEncoded[i];
+  
+      // --- logits
+      for var k := 0 to fClassCount - 1 do
+      begin
+        var wk := WCols[k];
+        var s := fIntercept.Data[k];
+  
+        for var j := 0 to p - 1 do
+          s += xi[j] * wk[j];
+  
+        zi[k] := s;
+      end;
+  
+      // --- stable softmax
+      var maxVal := zi[0];
+      for var k := 1 to fClassCount - 1 do
+        if zi[k] > maxVal then
+          maxVal := zi[k];
+  
+      var sumExp := 0.0;
+      for var k := 0 to fClassCount - 1 do
+      begin
+        var v: real;
+        if fUseFastExp then
+          v := FastExp(zi[k] - maxVal)
+        else  
+          v := Exp(zi[k] - maxVal);
+        zi[k] := v;
+        sumExp += v;
+      end;
+  
+      if sumExp <= 0 then
+      begin
+        var uniformProb := 1.0 / fClassCount;
+  
+        for var k := 0 to fClassCount - 1 do
+          zi[k] := uniformProb;
+      end
+      else
+      begin
+        var invSum := 1.0 / sumExp;
+  
+        for var k := 0 to fClassCount - 1 do
+          zi[k] *= invSum;
+      end;
+  
+      // --- loss
+      var prob := zi[yi];
+      if prob < 1e-300 then
+        prob := 1e-300;
+  
+      loss -= Ln(prob);
+  
+      // --- gradient
+      for var k := 0 to fClassCount - 1 do
+      begin
+        var diff := zi[k] - Ord(k = yi);
+  
+        gradB[k] += diff;
+  
+        var gwk := gradW[k];
+        for var j := 0 to p - 1 do
+          gwk[j] += xi[j] * diff;
+      end;
+    end;
+  
+    loss /= m;
+  
+    // --- L2 penalty
+    if fLambda <> 0 then
+    begin
+      var l2 := 0.0;
+      for var j := 0 to p - 1 do
+        for var k := 0 to fClassCount - 1 do
+          l2 += fW.Data[j,k] * fW.Data[j,k];
+  
+      loss += 0.5 * fLambda * l2;
+    end;
+  
+    // --- divergence check
+    if double.IsNaN(loss) or double.IsInfinity(loss) then
+      ArgumentError(ER_LOGISTIC_INVALID_LOSS);
+  
+    // --- convergence check
+    if fCheckConvergence then
+    begin
+      if Abs(prevLoss - loss) < Max(fMinImprovement, fTol * Max(1.0, Abs(prevLoss))) then
+        break;
+  
+      prevLoss := loss;
+    end;
+  
+    // --- update
+    var invM := 1.0 / m;
+  
+    for var k := 0 to fClassCount - 1 do
+    begin
+      gradB[k] *= invM;
+      fIntercept.Data[k] -= fLearningRate * gradB[k];
+      
+      for var j := 0 to p - 1 do
+      begin
+        var g := gradW[k][j] * invM;
+  
+        if fLambda <> 0 then
+          g += fLambda * fW.Data[j,k];
+  
+        fW.Data[j,k] -= fLearningRate * g;
+      end;
+    end;
+  end;
+
+  fFitted := true;
+  Result := Self;
+end;
+
+
+{function LogisticRegression.FitOld(X: Matrix; y: Vector): ISupervisedModel;
 begin
   if X = nil then
     ArgumentNullError(ER_X_NULL);
@@ -3301,7 +3594,7 @@ begin
 
   fFitted := true;
   Result := Self;
-end;
+end;}
 
 function LogisticRegression.PredictProba(X: Matrix): Matrix;
 begin
@@ -3394,7 +3687,8 @@ begin
     fEpochs,
     fTol,
     fCheckConvergence,
-    fMinImprovement
+    fMinImprovement,
+    fUseFastExp
   );
 end;
 
@@ -4050,6 +4344,7 @@ begin
     fMinSamplesSplit,
     fMinSamplesLeaf,
     fCriterion,
+    fClassCount,
     fMaxFeatures,
     fRandomSeed
   );
@@ -7256,15 +7551,6 @@ begin
   // --- copy train data
   fXTrain := X.Clone;
   
-  fSampleSize := Min(3000, fXTrain.RowCount); // попробуй 2000–4000
-
-  SetLength(fSampleIdx, fSampleSize);
-  
-  var rnd := new System.Random(42);
-  
-  for var i := 0 to fSampleSize - 1 do
-    fSampleIdx[i] := rnd.Next(fXTrain.RowCount);
-
   // =========================================================
   // ЕДИНЫЙ ENCODING
   // =========================================================
@@ -8269,17 +8555,17 @@ end;
 function DBSCAN.ClustersCount: integer := fClusterCount;
 
 //-----------------------------
-//          Pipeline 
+//          MatrixPipeline 
 //-----------------------------
 
-constructor Pipeline.Create;
+constructor MatrixPipeline.Create;
 begin
   fTransformers := new List<ITransformer>;
   fModel := nil;
   fFitted := false;
 end;
 
-constructor Pipeline.Create(model: ISupervisedModel);
+constructor MatrixPipeline.Create(model: ISupervisedModel);
 begin
   Create;
   if model = nil then
@@ -8287,7 +8573,7 @@ begin
   fModel := model;
 end;
 
-class function Pipeline.Build(params steps: array of IPipelineStep): Pipeline;
+class function MatrixPipeline.Build(params steps: array of IPipelineStep): MatrixPipeline;
 begin
   if (steps = nil) or (Length(steps) = 0) then
     ArgumentError(ER_PIPELINE_NO_STEPS);
@@ -8301,7 +8587,7 @@ begin
   if not (last is ISupervisedModel) then
     ArgumentError(ER_PIPELINE_LAST_NOT_SUPERVISED_MODEL);
 
-  var pipe := new Pipeline(last as ISupervisedModel);
+  var pipe := new MatrixPipeline(last as ISupervisedModel);
 
   // все шаги кроме последнего — трансформеры
   for var i := 0 to High(steps) - 1 do
@@ -8320,7 +8606,7 @@ begin
   Result := pipe;
 end;
 
-function Pipeline.Add(t: ITransformer): Pipeline;
+function MatrixPipeline.Add(t: ITransformer): MatrixPipeline;
 begin
   if t = nil then
     ArgumentError(ER_TRANSFORMER_NULL);
@@ -8329,7 +8615,7 @@ begin
   Result := Self;
 end;
 
-function Pipeline.SetModel(m: ISupervisedModel): Pipeline;
+function MatrixPipeline.SetModel(m: ISupervisedModel): MatrixPipeline;
 begin
   if m = nil then
     ArgumentError(ER_MODEL_NULL);
@@ -8338,7 +8624,7 @@ begin
   Result := Self;
 end;
 
-function Pipeline.Fit(X: Matrix; y: Vector): ISupervisedModel;
+function MatrixPipeline.Fit(X: Matrix; y: Vector): ISupervisedModel;
 begin
   if fModel = nil then
     ArgumentError(ER_MODEL_NULL);
@@ -8386,7 +8672,7 @@ begin
   Result := Self;
 end;
 
-function Pipeline.Transform(X: Matrix): Matrix;
+function MatrixPipeline.Transform(X: Matrix): Matrix;
 begin
   if not fFitted then
     NotFittedError(ER_FIT_NOT_CALLED);
@@ -8410,7 +8696,7 @@ begin
   Result := Xt;
 end;
 
-function Pipeline.Predict(X: Matrix): Vector;
+function MatrixPipeline.Predict(X: Matrix): Vector;
 begin
   if not fFitted then
     NotFittedError(ER_FIT_NOT_CALLED);
@@ -8422,7 +8708,7 @@ begin
   Result := fModel.Predict(Xt);
 end;
 
-function Pipeline.PredictProba(X: Matrix): Matrix;
+function MatrixPipeline.PredictProba(X: Matrix): Matrix;
 begin
   if not fFitted then
     NotFittedError(ER_FIT_NOT_CALLED);
@@ -8439,9 +8725,9 @@ begin
               .PredictProba(Xt);
 end;
 
-function Pipeline.ToString: string;
+function MatrixPipeline.ToString: string;
 begin
-  var sb := 'Pipeline (' +
+  var sb := 'MatrixPipeline (' +
             (if fFitted then 'trained' else 'not trained') + '):' + NewLine;
 
   var idx := 1;
@@ -8458,12 +8744,12 @@ begin
   Result := sb;
 end;
 
-function Pipeline.Clone: IModel;
+function MatrixPipeline.Clone: IModel;
 begin
   if fModel = nil then
     ArgumentError(ER_MODEL_NULL);
 
-  var p := new Pipeline;
+  var p := new MatrixPipeline;
 
   foreach var t in fTransformers do
     p.Add(t.Clone);
@@ -8479,16 +8765,16 @@ begin
 end;
 
 //-----------------------------
-//          UPipeline 
+//          UMatrixPipeline 
 //-----------------------------
-constructor UPipeline.Create;
+constructor UMatrixPipeline.Create;
 begin
   fTransformers := new List<ITransformer>;
   fModel := nil;
   fFitted := false;
 end;
 
-constructor UPipeline.Create(model: IModel);
+constructor UMatrixPipeline.Create(model: IModel);
 begin
   Create;
   if model = nil then
@@ -8496,7 +8782,7 @@ begin
   fModel := model;
 end;
 
-class function UPipeline.Build(params steps: array of IPipelineStep): UPipeline;
+class function UMatrixPipeline.Build(params steps: array of IPipelineStep): UMatrixPipeline;
 begin
   if (steps = nil) or (Length(steps) = 0) then
     ArgumentError(ER_PIPELINE_NO_STEPS);
@@ -8509,7 +8795,7 @@ begin
   if not (last is IModel) then
     ArgumentError(ER_PIPELINE_LAST_NOT_MODEL);
 
-  var pipe := new UPipeline(last as IModel);
+  var pipe := new UMatrixPipeline(last as IModel);
 
   for var i := 0 to High(steps) - 1 do
   begin
@@ -8527,7 +8813,7 @@ begin
   Result := pipe;
 end;
 
-function UPipeline.Add(t: ITransformer): UPipeline;
+function UMatrixPipeline.Add(t: ITransformer): UMatrixPipeline;
 begin
   if t = nil then
     ArgumentError(ER_TRANSFORMER_NULL);
@@ -8536,7 +8822,7 @@ begin
   Result := Self;
 end;
 
-function UPipeline.SetModel(m: IModel): UPipeline;
+function UMatrixPipeline.SetModel(m: IModel): UMatrixPipeline;
 begin
   if m = nil then
     ArgumentError(ER_MODEL_NULL);
@@ -8545,7 +8831,7 @@ begin
   Result := Self;
 end;
 
-function UPipeline.Fit(X: Matrix): IUnsupervisedModel;
+function UMatrixPipeline.Fit(X: Matrix): IUnsupervisedModel;
 begin
   if fModel = nil then
     ArgumentError(ER_MODEL_NULL);
@@ -8585,7 +8871,7 @@ begin
   Result := Self;
 end;
 
-function UPipeline.Transform(X: Matrix): Matrix;
+function UMatrixPipeline.Transform(X: Matrix): Matrix;
 begin
   if not fFitted then
     NotFittedError(ER_FIT_NOT_CALLED);
@@ -8609,7 +8895,7 @@ begin
   Result := Xt;
 end;
 
-function UPipeline.Predict(X: Matrix): Vector;
+function UMatrixPipeline.Predict(X: Matrix): Vector;
 begin
   if not fFitted then
     NotFittedError(ER_FIT_NOT_CALLED);
@@ -8625,9 +8911,9 @@ begin
   Result := (fModel as IPredictiveModel).Predict(Xt);
 end;
 
-function UPipeline.ToString: string;
+function UMatrixPipeline.ToString: string;
 begin
-  var sb := 'UPipeline (' +
+  var sb := 'UMatrixPipeline (' +
             (if fFitted then 'trained' else 'not trained') + '):' + NewLine;
 
   var idx := 1;
@@ -8644,12 +8930,12 @@ begin
   Result := sb;
 end;
 
-function UPipeline.Clone: IModel;
+function UMatrixPipeline.Clone: IModel;
 begin
   if fModel = nil then
     ArgumentError(ER_MODEL_NULL);
 
-  var p := new UPipeline;
+  var p := new UMatrixPipeline;
 
   foreach var t in fTransformers do
     p.Add(t.Clone);

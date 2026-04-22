@@ -98,6 +98,7 @@ type
   Column = abstract class
     Info: ColumnInfo;
   public
+    IsValid: array of boolean;  // Флаги валидности (может быть nil)
     /// Пытается извлечь i-тое данное из столбца как числовое если это возможно
     function TryGetNumericValue(i: integer; var value: real): boolean; virtual; abstract;
     /// Возвращает количество строк в столбце
@@ -108,7 +109,6 @@ type
   IntColumn = class(Column)
     // Data и IsValid считаются immutable после создания
     Data: array of integer;     // Данные столбца
-    IsValid: array of boolean;  // Флаги валидности (может быть nil)
   public
     constructor Create; begin end;
     constructor Create(name: string);
@@ -121,7 +121,6 @@ type
   /// Столбец вещественных чисел
   FloatColumn = class(Column)
     Data: array of real;        // Данные столбца
-    IsValid: array of boolean;  // Флаги валидности
   public  
     constructor Create; begin end;
     constructor Create(name: string);
@@ -135,7 +134,6 @@ type
   /// Столбец строк
   StrColumn = class(Column)
     Data: array of string;      // Данные столбца
-    IsValid: array of boolean;  // Флаги валидности
   public
     constructor Create; begin end;
     constructor Create(name: string);
@@ -153,7 +151,6 @@ type
   /// Столбец булевых значений
   BoolColumn = class(Column)
     Data: array of boolean;     // Данные столбца
-    IsValid: array of boolean;  // Флаги валидности
   public  
     constructor Create; begin end;
     constructor Create(name: string);
@@ -177,9 +174,9 @@ type
     ColTypes: array of ColumnType;
   end;
   
+  // Нет Floats - по ним нельзя Join!!!
   JoinKey = record
     Ints: array of integer;
-    Floats: array of real;
     Strs: array of string;
     Bools: array of boolean;
     function Equals(oth: object): boolean; override;
@@ -731,15 +728,11 @@ begin
   var other := JoinKey(oth);
 
   if Ints.Length <> other.Ints.Length then exit(false);
-  if Floats.Length <> other.Floats.Length then exit(false);
   if Strs.Length <> other.Strs.Length then exit(false);
   if Bools.Length <> other.Bools.Length then exit(false);
 
   for var i := 0 to Ints.Length - 1 do
     if Ints[i] <> other.Ints[i] then exit(false);
-
-  for var i := 0 to Floats.Length - 1 do
-    if Floats[i] <> other.Floats[i] then exit(false);
 
   for var i := 0 to Strs.Length - 1 do
     if Strs[i] <> other.Strs[i] then exit(false);
@@ -755,9 +748,6 @@ begin
   var h := 17;
 
   foreach var v in Ints do
-    h := h * 31 + v.GetHashCode;
-
-  foreach var v in Floats do
     h := h * 31 + v.GetHashCode;
 
   foreach var v in Strs do

@@ -1,4 +1,8 @@
-﻿// =============================================================
+﻿/// Основной модуль библиотеки машинного обучения.
+/// Объединяет модели, метрики, валидацию и вспомогательные компоненты.
+unit MLABC;
+
+// =============================================================
 // СТАТИСТИЧЕСКАЯ ПОЛИТИКА БИБЛИОТЕКИ ML PascalABC.NET
 //
 // В библиотеке используются следующие соглашения:
@@ -17,9 +21,20 @@
 //   • алгоритмы ML — дисперсия генеральной совокупности
 // =============================================================
 
-/// Основной модуль библиотеки машинного обучения.
-/// Объединяет модели, метрики, валидацию и вспомогательные компоненты.
-unit MLABC;
+// =============================================================
+// PIPELINES
+//
+// DataFrame-based:
+//   DataPipeline
+//   UDataPipeline
+//
+// Matrix/Vector-based:
+//   MatrixPipeline
+//   UMatrixPipeline
+//
+// Оба варианта являются равноправными и используются
+// в зависимости от представления данных.
+// =============================================================
 
 interface 
 
@@ -74,7 +89,7 @@ type
   NormType = MLModelsABC.NormType;
   
   Activations = MLModelsABC.Activations;
-  Pipeline = MLModelsABC.Pipeline;
+  Pipeline = MLModelsABC.MatrixPipeline;
   
   LinearRegression = MLModelsABC.LinearRegression;
   LogisticRegression = MLModelsABC.LogisticRegression;
@@ -113,7 +128,7 @@ type
   IModel = MLCoreABC.IModel;
   ISupervisedModel = MLCoreABC.ISupervisedModel;
   IUnsupervisedModel = MLCoreABC.IUnsupervisedModel;
-  UPipeline = MLModelsABC.UPipeline;
+  UPipeline = MLModelsABC.UMatrixPipeline;
   UDataPipeline = MLPipelineABC.UDataPipeline;
   TaskKind = MLPipelineABC.TaskKind;
   

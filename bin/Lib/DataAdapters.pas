@@ -25,6 +25,8 @@ const
     'Столбец "{0}" должен быть категориальным для EncodeLabels!!Column "{0}" must be categorical for EncodeLabels';
   ER_ENCODELABELS_UNSUPPORTED_TYPE =
     'Неподдерживаемый тип столбца "{0}" для EncodeLabels!!Unsupported column type "{0}" for EncodeLabels';
+  ER_TARGET_HAS_NA =
+    'Целевой столбец "{0}" содержит NA!!Target column "{0}" contains NA values';  
     
 function ToMatrix(Self: DataFrame; colNames: array of string): Matrix; extensionmethod;
 begin
@@ -89,6 +91,11 @@ begin
 
   if not Self.IsCategorical(target) then
     ArgumentError(ER_ENCODELABELS_NOT_CATEGORICAL, target);
+  
+  var col := Self[target];
+  for var i := 0 to Self.RowCount - 1 do
+    if not col.IsValid[i] then
+      ArgumentError(ER_TARGET_HAS_NA, target);
 
   if Self.GetColumnType(target) = ColumnType.ctStr then
   begin
@@ -130,15 +137,18 @@ begin
 
   if not Self.IsCategorical(target) then
     ArgumentError(ER_ENCODELABELS_NOT_CATEGORICAL, target);
+  
+  var col := Self[target];
+  for var i := 0 to Self.RowCount - 1 do
+    if not col.IsValid[i] then
+      ArgumentError(ER_TARGET_HAS_NA, target);
 
   case Self.GetColumnType(target) of
-
     ColumnType.ctStr:
       begin
         var labels := Self.GetStrColumn(target).ToArray;
         Result := EncodeLabels(labels, classes);
       end;
-
     ColumnType.ctInt:
       begin
         var labels := Self.GetIntColumn(target).ToArray;
@@ -149,7 +159,6 @@ begin
         // если API требует string classes:
         classes := intClasses.Select(x -> x.ToString).ToArray;
       end;
-
     else
       ArgumentError(ER_ENCODELABELS_UNSUPPORTED_TYPE, target);
   end;
@@ -176,15 +185,18 @@ begin
 
   if not Self.IsCategorical(target) then
     ArgumentError(ER_ENCODELABELS_NOT_CATEGORICAL, target);
+  
+  var col := Self[target];
+  for var i := 0 to Self.RowCount - 1 do
+    if not col.IsValid[i] then
+      ArgumentError(ER_TARGET_HAS_NA, target);
 
   case Self.GetColumnType(target) of
-  
     ColumnType.ctStr:
       begin
         var data := Self.GetStrColumn(target).ToArray;
         Result := TransformLabels(data, classes);
       end;
-  
     ColumnType.ctInt:
       begin
         var data := Self.GetIntColumn(target).ToArray;
@@ -195,7 +207,6 @@ begin
   
         Result := TransformLabels(strData, classes);
       end;
-  
     else
       ArgumentError(ER_ENCODELABELS_UNSUPPORTED_TYPE, target);
   end;
@@ -224,6 +235,11 @@ begin
 
   if Self.GetColumnType(target) <> ColumnType.ctInt then
     ArgumentError(ER_ENCODELABELS_UNSUPPORTED_TYPE, target);
+  
+  var col := Self[target];
+  for var i := 0 to Self.RowCount - 1 do
+    if not col.IsValid[i] then
+      ArgumentError(ER_TARGET_HAS_NA, target);
 
   var data := Self.GetIntColumn(target).ToArray;
 
@@ -252,6 +268,11 @@ begin
 
   if Self.GetColumnType(target) <> ColumnType.ctInt then
     ArgumentError(ER_ENCODELABELS_UNSUPPORTED_TYPE, target);
+
+  var col := Self[target];
+  for var i := 0 to Self.RowCount - 1 do
+    if not col.IsValid[i] then
+      ArgumentError(ER_TARGET_HAS_NA, target);
 
   var labels := Self.GetIntColumn(target).ToArray;
 

@@ -298,7 +298,8 @@ const
     'Model is not a classifier';
   ER_MODEL_CLONE_TYPE = 
     'Clone модели вернул неподдерживаемый тип!!Model Clone returned unsupported type';
-
+  ER_INVALID_MODEL_TYPE =
+    'Clone модели вернул неподдерживаемый тип (ожидается {0})!!Model Clone returned unsupported type (expected {0})';
 //-----------------------------
 //        DataPipeline
 //-----------------------------
@@ -1143,7 +1144,14 @@ begin
 
   // --- модель
   if fModel <> nil then
-    p.fModel := fModel.Clone as IUnsupervisedModel;
+  begin
+    var m := fModel.Clone;
+
+    if not (m is IUnsupervisedModel) then
+      Error(ER_INVALID_MODEL_TYPE, 'IUnsupervisedModel');
+
+    p.fModel := m as IUnsupervisedModel;
+  end;
 
   // --- состояние НЕ копируем
   p.fFinalFeatures := nil;

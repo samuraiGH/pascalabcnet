@@ -11642,102 +11642,127 @@ end;
 // Дополнения 2024: Zip - синоним ZipTuple
 
 /// Возвращает первый элемент последовательности с минимальным значением ключа
+/// Возвращает первый элемент последовательности с минимальным значением ключа
 function MinBy<T, TKey>(Self: sequence of T; keySelector: T -> TKey): T; extensionmethod; 
 begin
-  var enumerator := Self.GetEnumerator();
-  if not enumerator.MoveNext() then
-    raise new System.ArgumentException(GetTranslation(SEQUENCE_CANNOT_BE_EMPTY));
-  
-  var minElement := enumerator.Current; 
-  var minKey := keySelector(minElement); 
-
   var comp := Comparer&<TKey>.Default;
-  while enumerator.MoveNext() do
-  begin
-    var currentElement := enumerator.Current;
-    var currentKey := keySelector(currentElement);
-    if comp.Compare(currentKey,minKey) < 0 then
-    begin
-      minKey := currentKey;
-      minElement := currentElement; 
-    end;
-  end;
+  var minElement: T;
+  var minKey: TKey;
+  var hasValue := False;
   
+  foreach var current in Self do
+    if not hasValue then
+    begin
+      minElement := current;
+      minKey := keySelector(current);
+      hasValue := True;
+    end
+    else
+    begin
+      var currentKey := keySelector(current);
+      if comp.Compare(currentKey, minKey) < 0 then  // только строго меньше
+      begin
+        minKey := currentKey;
+        minElement := current;
+      end;
+    end;
+  
+  if not hasValue then
+    raise new ArgumentException(GetTranslation(SEQUENCE_CANNOT_BE_EMPTY));
+    
   Result := minElement;
 end;
 
 /// Возвращает первый элемент последовательности с максимальным значением ключа
 function MaxBy<T, TKey>(Self: sequence of T; keySelector: T -> TKey): T; extensionmethod; 
 begin
-  var enumerator := Self.GetEnumerator();
-  if not enumerator.MoveNext() then
-    raise new System.ArgumentException(GetTranslation(SEQUENCE_CANNOT_BE_EMPTY));
-  
-  var maxElement := enumerator.Current; 
-  var maxKey := keySelector(maxElement); 
-
   var comp := Comparer&<TKey>.Default;
-  while enumerator.MoveNext() do
-  begin
-    var currentElement := enumerator.Current;
-    var currentKey := keySelector(currentElement);
-    if comp.Compare(currentKey,maxKey) > 0 then
-    begin
-      maxKey := currentKey;
-      maxElement := currentElement; 
-    end;
-  end;
+  var maxElement: T;
+  var maxKey: TKey;
+  var hasValue := False;
   
+  foreach var current in Self do
+    if not hasValue then
+    begin
+      maxElement := current;
+      maxKey := keySelector(current);
+      hasValue := True;
+    end
+    else
+    begin
+      var currentKey := keySelector(current);
+      if comp.Compare(currentKey, maxKey) > 0 then  
+      begin
+        maxKey := currentKey;
+        maxElement := current;
+      end;
+    end;
+  
+  if not hasValue then
+    raise new ArgumentException(GetTranslation(SEQUENCE_CANNOT_BE_EMPTY));
+    
   Result := maxElement;
 end;
 
 /// Возвращает последний элемент последовательности с минимальным значением ключа
-function LastMinBy<T, TKey>(Self: sequence of T; keySelector: T -> TKey): T; extensionmethod; 
+function LastMinBy<T, TKey>(Self: sequence of T; keySelector: T -> TKey): T; extensionmethod;
 begin
-  var enumerator := Self.GetEnumerator();
-  if not enumerator.MoveNext() then
-    raise new System.ArgumentException(GetTranslation(SEQUENCE_CANNOT_BE_EMPTY));
-  
-  var minElement := enumerator.Current; 
-  var minKey := keySelector(minElement); 
-
   var comp := Comparer&<TKey>.Default;
-  while enumerator.MoveNext() do
-  begin
-    var currentElement := enumerator.Current;
-    var currentKey := keySelector(currentElement);
-    if comp.Compare(currentKey,minKey) <= 0 then
-    begin
-      minKey := currentKey;
-      minElement := currentElement; 
-    end;
-  end;
+  var minElement: T;
+  var minKey: TKey;
+  var hasValue := False;
   
+  foreach var current in Self do
+    if not hasValue then
+    begin
+      minElement := current;
+      minKey := keySelector(current);
+      hasValue := True;
+    end
+    else
+    begin
+      var currentKey := keySelector(current);
+      if comp.Compare(currentKey, minKey) <= 0 then  // <= для последнего минимума
+      begin
+        minKey := currentKey;
+        minElement := current;
+      end;
+    end;
+  
+  if not hasValue then
+    raise new ArgumentException(GetTranslation(SEQUENCE_CANNOT_BE_EMPTY));
+    
   Result := minElement;
 end;
 
 /// Возвращает последний элемент последовательности с максимальным значением ключа
-function LastMaxBy<T, TKey>(Self: sequence of T; keySelector: T -> TKey): T; extensionmethod; 
+function LastMaxBy<T, TKey>(Self: sequence of T; keySelector: T -> TKey): T; extensionmethod;
 begin
-  var enumerator := Self.GetEnumerator();
-  if not enumerator.MoveNext() then
-    raise new System.ArgumentException(GetTranslation(SEQUENCE_CANNOT_BE_EMPTY));
-  
-  var maxElement := enumerator.Current; 
-  var maxKey := keySelector(maxElement); 
-
   var comp := Comparer&<TKey>.Default;
-  while enumerator.MoveNext() do
-  begin
-    var currentElement := enumerator.Current;
-    var currentKey := keySelector(currentElement);
-    if comp.Compare(currentKey,maxKey) > 0 then
-    begin
-      maxKey := currentKey;
-      maxElement := currentElement; 
-    end;
-  end;
+  var maxElement: T;
+  var maxKey: TKey;
+  var hasValue := False;
   
+  foreach var current in Self do
+    if not hasValue then
+    begin
+      maxElement := current;
+      maxKey := keySelector(current);
+      hasValue := True;
+    end
+    else
+    begin
+      var currentKey := keySelector(current);
+      if comp.Compare(currentKey, maxKey) >= 0 then
+      begin
+        maxKey := currentKey;
+        maxElement := current;
+      end;
+    end;
+  
+  if not hasValue then
+    raise new ArgumentException(GetTranslation(SEQUENCE_CANNOT_BE_EMPTY));
+    
   Result := maxElement;
 end;
 

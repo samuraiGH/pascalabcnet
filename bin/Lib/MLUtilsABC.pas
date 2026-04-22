@@ -40,6 +40,7 @@ function IntsToLabels(a: array of integer): Vector;
 /// Каждому уникальному значению присваивается номер 0,1,2,...
 /// Порядок кодирования соответствует порядку первого появления меток.
 /// Используется при обучении моделей и визуализации.
+/// Предполагается, что входные данные уже очищены от пропущенных значений.
 function EncodeLabels(labels: array of string): array of integer;
 
 /// Кодирует строковые метки классов в целочисленные индексы.
@@ -47,6 +48,7 @@ function EncodeLabels(labels: array of string): array of integer;
 /// Порядок кодирования соответствует порядку первого появления меток.
 /// В параметр classes возвращается массив уникальных значений в порядке кодирования.
 /// Используется при обучении моделей и визуализации
+/// Предполагается, что входные данные уже очищены от пропущенных значений.
 function EncodeLabels(labels: array of string; var classes: array of string): array of integer;
 
 /// Кодирует целые метки классов в целочисленные индексы.
@@ -54,6 +56,7 @@ function EncodeLabels(labels: array of string; var classes: array of string): ar
 /// Порядок кодирования соответствует порядку первого появления меток.
 /// В параметр classes возвращается массив уникальных значений в порядке кодирования.
 /// Используется при обучении моделей и визуализации
+/// Предполагается, что входные данные уже очищены от пропущенных значений.
 function EncodeLabelsInt(labels: array of integer; var classes: array of integer): array of integer;
 
 /// Преобразует строковые метки классов в целочисленные индексы
@@ -61,6 +64,7 @@ function EncodeLabelsInt(labels: array of integer; var classes: array of integer
 /// classes должен быть получен из EncodeLabels.
 /// Если встречается неизвестная метка — выбрасывается исключение.
 /// Используется для применения кодирования к тестовым данным (Transform).
+/// Предполагается, что входные данные уже очищены от пропущенных значений.
 function TransformLabels(labels: array of string; classes: array of string): array of integer;
 
 /// Преобразует целочисленные метки классов в индексы (0,1,2,...)
@@ -68,11 +72,13 @@ function TransformLabels(labels: array of string; classes: array of string): arr
 /// classes должен быть получен из EncodeLabelsInt.
 /// Если встречается неизвестное значение — выбрасывается исключение.
 /// Используется для применения кодирования к тестовым данным (Transform).
+/// Предполагается, что входные данные уже очищены от пропущенных значений.
 function TransformLabelsInt(labels: array of integer; classes: array of integer): array of integer;
 
 /// Преобразует целочисленные индексы классов обратно в строковые метки.
 /// Массив classes задаёт соответствие: classes[i] — имя класса с индексом i.
 /// Используется для получения текстовых предсказаний моделей.
+/// Предполагается, что входные данные уже корректны.
 function DecodeLabels(y: array of integer; classes: array of string): array of string;
 
 /// Возвращает список уникальных меток классов.
@@ -266,7 +272,17 @@ end;
 
 function UniqueLabels(labels: array of string): array of string;
 begin
-  Result := labels.Distinct.ToArray;
+  var seen := new HashSet<string>;
+  var res := new List<string>;
+
+  for var i := 0 to labels.Length - 1 do
+    if not seen.Contains(labels[i]) then
+    begin
+      seen.Add(labels[i]);
+      res.Add(labels[i]);
+    end;
+
+  Result := res.ToArray;
 end;
 
 function CloneOrNil(v: Vector): Vector;
