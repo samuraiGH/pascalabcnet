@@ -88,7 +88,7 @@ type
 /// Категории фиксируются при Fit
 /// Неизвестные категории кодируются нулями
 /// Пропущенные значения (NA) кодируются нулями
-  OneHotEncoder = class(IPreprocessor, IColumnBoundStep)
+  OneHotEncoder = class(IPreprocessor, IColumnBoundStep, IColumnExpander)
   private
     col: string;
     categories: array of string;
@@ -115,6 +115,8 @@ type
     function ToString: string; override;
     
     property ColumnName: string read col;
+    
+    function GetExpandedColumns(sourceColumn: string): array of string;
 
 /// Создаёт копию препроцессора с той же конфигурацией.
 ///
@@ -251,7 +253,13 @@ const
   ER_IMPUTER_STRATEGY_NOT_SUPPORTED =
     'Стратегия импутации {0} не поддерживается!!Imputation strategy {0} is not supported';
   ER_UNSUPPORTED_IMPUTE_STRATEGY =
-    'Неподдерживаемая стратегия заполнения: {0}!!Unsupported impute strategy: {0}';    
+    'Неподдерживаемая стратегия заполнения: {0}!!Unsupported impute strategy: {0}';
+  ER_ONEHOT_NAME_EQUALS_SOURCE =
+    'Сгенерированная колонка совпадает с исходной: {0}!!Generated column equals source column: {0}';
+  ER_ONEHOT_COLUMN_COLLISION =
+    'Конфликт имён колонок: {0}!!Column name collision: {0}';
+  ER_ONEHOT_DUPLICATE_COLUMN =
+    'Дублирующаяся сгенерированная колонка: {0}!!Duplicate generated column: {0}';  
     
   
 //-----------------------------
@@ -407,6 +415,29 @@ begin
     Error(ER_ONEHOT_EMPTY_COLUMN, col);
 
   categories := values.ToArray;
+  
+  // --- проверка коллизий имён колонок
+  var used := new HashSet<string>;
+  
+  for var i := 0 to categories.Length - 1 do
+  begin
+    var newName := col + '_' + categories[i];
+  
+    // 1. совпадение с исходным именем
+    if newName = col then
+      Error(ER_ONEHOT_NAME_EQUALS_SOURCE, newName);
+  
+    // 2. коллизия с существующими колонками DataFrame
+    if df.HasColumn(newName) then
+      Error(ER_ONEHOT_COLUMN_COLLISION, newName);
+  
+    // 3. дубликаты среди сгенерированных колонок
+    if used.Contains(newName) then
+      Error(ER_ONEHOT_DUPLICATE_COLUMN, newName);
+  
+    used.Add(newName);
+  end;
+  
   fitted := true;
   Result := Self;
 end;
@@ -463,6 +494,21 @@ function OneHotEncoder.FitTransform(df: DataFrame): DataFrame;
 begin
   Fit(df);
   Result := Transform(df);
+end;
+
+function OneHotEncoder.GetExpandedColumns(sourceColumn: string): array of string;
+begin
+  if not fitted then
+    NotFittedError(ER_FIT_NOT_CALLED);
+  
+  if sourceColumn <> col then
+    exit(nil);
+
+  var res := new string[categories.Length];
+  for var i := 0 to categories.Length - 1 do
+    res[i] := col + '_' + categories[i];
+
+  Result := res;
 end;
 
 function OneHotEncoder.ToString: string;
@@ -615,13 +661,15 @@ begin
     if not (ct in [ColumnType.ctInt, ColumnType.ctFloat]) then
       Error(ER_IMPUTER_COLUMN_NOT_NUMERIC, name);
 
+    var capturedIdx := idx;
+    
     case strategy of
       isMean:
       begin
         var m := means[i];
         res := res.ReplaceColumnFloat(
           name,
-          c -> (if c.IsValid(idx) then c.Float(idx) else m)
+          c -> (if c.IsValid(capturedIdx) then c.Float(capturedIdx) else m)
         );
       end;
 
@@ -665,7 +713,7 @@ begin
 
           res := res.ReplaceColumnFloat(
             name,
-            c -> (if c.IsValid(idx) then c.Float(idx) else r)
+            c -> (if c.IsValid(capturedIdx) then c.Float(capturedIdx) else r)
           );
         end;
       end;
@@ -675,7 +723,7 @@ begin
         var m := medians[i];
         res := res.ReplaceColumnFloat(
           name,
-          c -> (if c.IsValid(idx) then c.Float(idx) else m)
+          c -> (if c.IsValid(capturedIdx) then c.Float(capturedIdx) else m)
         );
       end;
 

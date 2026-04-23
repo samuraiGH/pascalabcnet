@@ -1681,10 +1681,10 @@ end;
 static function Metrics.AdjustedRandIndex(yTrue, yPred: Vector): real;
 begin
   if yTrue = nil then
-    ArgumentNullError(ER_Y_NULL);
+    ArgumentNullError(ER_ARG_NULL, 'yTrue');
 
   if yPred = nil then
-    ArgumentNullError(ER_Y_NULL);
+    ArgumentNullError(ER_ARG_NULL, 'yPred');
 
   var n := yTrue.Length;
   if n <> yPred.Length then
@@ -1773,56 +1773,6 @@ begin
 
   Result := (sumNij - expected) / denom;
 end;
-
-{static function Metrics.AdjustedRandIndex(yTrue, yPred: Vector): real;
-begin
-  if yTrue.Length <> yPred.Length then
-    DimensionError(ER_DIM_MISMATCH, yTrue.Length, yPred.Length);
-
-  var n := yTrue.Length;
-
-  if n < 2 then
-    Result := 1
-  else
-  begin
-    var tp := 0;
-    var tn := 0;
-    var fp := 0;
-    var fn := 0;
-
-    for var i := 0 to n-2 do
-      for var j := i+1 to n-1 do
-      begin
-        var sameTrue := yTrue[i] = yTrue[j];
-        var samePred := yPred[i] = yPred[j];
-
-        if sameTrue and samePred then
-          tp += 1
-        else if (not sameTrue) and (not samePred) then
-          tn += 1
-        else if (not sameTrue) and samePred then
-          fp += 1
-        else
-          fn += 1;
-      end;
-
-    var total := tp + tn + fp + fn;
-
-    var ri := (tp + tn) / total;
-
-    var a := tp + fp;
-    var b := tp + fn;
-    var c := fn + tn;
-    var d := fp + tn;
-
-    var expected := ((a*b) + (c*d)) / (total*total);
-
-    if 1 - expected = 0 then
-      Result := 0
-    else
-      Result := (ri - expected) / (1 - expected);
-  end;
-end;}
 
 function R(s: string; w: integer): string;
 begin

@@ -2475,7 +2475,15 @@ type
 
 {$endregion Utility functions}
 
-type  
+type
+/// Проверять ли входные данные моделей на NaN и Infinity.
+///
+/// По умолчанию: True — модели валидируют вход и выбрасывают исключение.
+///
+/// Установка в False отключает проверки ГЛОБАЛЬНО для всех моделей.
+/// Использовать только если данные гарантированно очищены.
+///
+/// При наличии NaN/Inf поведение моделей не определено
   MLConfig = static class
   public
     /// Проверять ли входные данные моделей на NaN, Inf
@@ -2624,9 +2632,9 @@ const
   ER_LEAFL2_INVALID =
     'leafL2 должно быть >= 0 ({0}).!!' +
     'leafL2 must be >= 0 ({0}).'; 
-  ER_MIN_LEAF_GE_SPLIT =
-    'minSamplesLeaf ({0}) должно быть меньше minSamplesSplit ({1}).!!' +
-    'minSamplesLeaf ({0}) must be less than minSamplesSplit ({1}).';
+  ER_MIN_LEAF_GT_SPLIT =
+    'minSamplesSplit ({1}) должен быть > 2 * minSamplesLeaf ({0}).!!' +
+    'minSamplesSplit ({1}) must be > 2 * minSamplesLeaf ({0}).';
   ER_OOB_NOT_ENABLED =
     'OOB score не включен для этой модели. Установите computeOOB = true в конструкторе.!!' +
     'OOB score is not enabled for this model. Set computeOOB = true in the constructor.';
@@ -3252,10 +3260,6 @@ begin
 
   // --- init
   fW := new Matrix(p, fClassCount);
-  var scale := 0.01;
-  for var j := 0 to p - 1 do
-    for var k := 0 to fClassCount - 1 do
-      fW.Data[j,k] := (Random - 0.5) * 2 * scale;
 
   fIntercept := new Vector(fClassCount);
 
@@ -3718,7 +3722,7 @@ begin
   if fClassLabels = nil then
     ArgumentError(ER_CLASSES_NOT_AVAILABLE);
 
-  Result := fClassLabels;
+  Result := Copy(fClassLabels);
 end;
 
 function GiniCriterion.Impurity(y: Vector; indices: array of integer): real;
@@ -4375,11 +4379,9 @@ begin
   if minSamplesLeaf < 1 then
     ArgumentOutOfRangeError(ER_MIN_SAMPLES_LEAF_INVALID, minSamplesLeaf);
 
-  if 2 * minSamplesLeaf >= minSamplesSplit then
-    ArgumentOutOfRangeError(
-      ER_MIN_LEAF_GE_SPLIT,
-      minSamplesLeaf, minSamplesSplit
-    );
+ 
+  if minSamplesSplit < 2 * minSamplesLeaf then
+    ArgumentOutOfRangeError(ER_MIN_LEAF_GT_SPLIT, minSamplesLeaf, minSamplesSplit);
 
   // --- parameters valid → assign
 
@@ -4694,8 +4696,8 @@ begin
   if minSamplesLeaf < 1 then
     ArgumentOutOfRangeError(ER_MIN_SAMPLES_LEAF_INVALID, minSamplesLeaf);
 
-  if minSamplesLeaf >= minSamplesSplit then
-    ArgumentOutOfRangeError(ER_MIN_LEAF_GE_SPLIT, minSamplesLeaf, minSamplesSplit);
+  if minSamplesSplit < 2 * minSamplesLeaf then
+    ArgumentOutOfRangeError(ER_MIN_LEAF_GT_SPLIT, minSamplesLeaf, minSamplesSplit);
   
   if maxFeatures < 0 then
     ArgumentOutOfRangeError(ER_MAX_FEATURES_INVALID);
@@ -4753,22 +4755,17 @@ begin
   var classes: array of integer;
   var yEncArr := EncodeLabelsInt(yInt, classes);
   
-  if fCriterion = nil then
-    fCriterion := new GiniCriterion(classes.Length);
-
   if classes.Length < 2 then
     ArgumentError(ER_NEED_AT_LEAST_TWO_CLASSES);
-
-  fIndexToClass := classes;
 
   // --- criterion
   if fCriterion = nil then
     fCriterion := new GiniCriterion(classes.Length);
 
+  fIndexToClass := classes;
+
   // --- encoded vector
-  var yEncoded := new Vector(m);
-  for var i := 0 to m - 1 do
-    yEncoded[i] := yEncArr[i];
+  var yEncoded := new Vector(yEncArr);
 
   // --- Core
   fCore := new DecisionTreeCore(
@@ -4854,7 +4851,7 @@ begin
   if fClassLabels = nil then
     ArgumentError(ER_CLASSES_NOT_AVAILABLE);
 
-  Result := fClassLabels;
+  Result := Copy(fClassLabels);
 end;
 
 // DecisionTreeRegressor
@@ -5003,9 +5000,7 @@ begin
     CheckXForPredict(X);
 
   if X.ColCount <> fFeatureImportances.Length then
-    DimensionError(ER_FEATURE_COUNT_MISMATCH,
-                   X.ColCount,
-                   fFeatureImportances.Length);
+    DimensionError(ER_FEATURE_COUNT_MISMATCH, X.ColCount, fFeatureImportances.Length);
 
   var n := X.RowCount;
   Result := new Vector(n);
@@ -5066,8 +5061,8 @@ begin
   if minSamplesLeaf < 1 then
     ArgumentOutOfRangeError(ER_MIN_SAMPLES_LEAF_INVALID, minSamplesLeaf);
   
-  if minSamplesLeaf >= minSamplesSplit then
-    ArgumentOutOfRangeError(ER_MIN_LEAF_GE_SPLIT, minSamplesLeaf, minSamplesSplit);
+  if minSamplesSplit < 2 * minSamplesLeaf then
+    ArgumentOutOfRangeError(ER_MIN_LEAF_GT_SPLIT, minSamplesLeaf, minSamplesSplit);
     
   fNTrees := nTrees;
   fMaxDepth := maxDepth;
@@ -5680,7 +5675,7 @@ begin
   if fClassLabels = nil then
     ArgumentError(ER_CLASSES_NOT_AVAILABLE);
 
-  Result := fClassLabels;
+  Result := Copy(fClassLabels);
 end;
 
 //-----------------------------
@@ -5763,6 +5758,9 @@ begin
   
   if minSamplesLeaf < 1 then
     ArgumentOutOfRangeError(ER_MIN_SAMPLES_LEAF_INVALID, minSamplesLeaf);
+  
+  if minSamplesSplit < 2 * minSamplesLeaf then
+    ArgumentOutOfRangeError(ER_MIN_LEAF_GT_SPLIT, minSamplesLeaf, minSamplesSplit);
   
   if maxDepth > MAX_ALLOWED_TREE_DEPTH then
     ArgumentOutOfRangeError(ER_MAX_DEPTH_TOO_LARGE, maxDepth);
@@ -6026,10 +6024,10 @@ begin
     end;
 
     if XVal.RowCount <> yVal.Length then
-      DimensionError(ER_XY_SIZE_MISMATCH);
+      DimensionError(ER_XY_SIZE_MISMATCH,XVal.RowCount,yVal.Length);
 
     if XVal.ColCount <> XTrain.ColCount then
-      DimensionError(ER_FEATURE_COUNT_MISMATCH);
+      DimensionError(ER_FEATURE_COUNT_MISMATCH,XVal.ColCount,XTrain.ColCount);
   end;
   
   // --- OOB checks ---
@@ -6241,7 +6239,7 @@ begin
     CheckXForPredict(X);
 
   if X.ColCount <> fFeatureCount then
-    DimensionError(ER_FEATURE_COUNT_MISMATCH);
+    DimensionError(ER_FEATURE_COUNT_MISMATCH,X.ColCount,fFeatureCount);
 
   var n := X.RowCount;
   var yPred := new Vector(n);
@@ -6473,7 +6471,7 @@ begin
     ArgumentError(ER_EMPTY_DATASET);
 
   if XTrain.RowCount <> yTrain.Length then
-    DimensionError(ER_XY_SIZE_MISMATCH);
+    DimensionError(ER_XY_SIZE_MISMATCH,XTrain.RowCount,yTrain.Length);
 
   if useValidation then
   begin
@@ -6490,10 +6488,10 @@ begin
     end;
 
     if XVal.RowCount <> yVal.Length then
-      DimensionError(ER_XY_SIZE_MISMATCH);
+      DimensionError(ER_XY_SIZE_MISMATCH,XVal.RowCount,yVal.Length);
 
     if XVal.ColCount <> XTrain.ColCount then
-      DimensionError(ER_FEATURE_COUNT_MISMATCH);
+      DimensionError(ER_FEATURE_COUNT_MISMATCH,XVal.ColCount,XTrain.ColCount);
   end;
 
   // --- reset state
@@ -7007,6 +7005,9 @@ begin
   if minSamplesLeaf < 1 then
     ArgumentOutOfRangeError(ER_MIN_SAMPLES_LEAF_INVALID, minSamplesLeaf);
   
+  if minSamplesSplit < 2 * minSamplesLeaf then
+    ArgumentOutOfRangeError(ER_MIN_LEAF_GT_SPLIT, minSamplesLeaf, minSamplesSplit);
+  
   if (subsample <= 0) or (subsample > 1) then
     ArgumentOutOfRangeError(ER_SUBSAMPLE_OUT_OF_RANGE, subsample);
   
@@ -7050,7 +7051,7 @@ begin
     CheckXForPredict(X);
 
   if X.ColCount <> fFeatureCount then
-    DimensionError(ER_FEATURE_COUNT_MISMATCH);
+    DimensionError(ER_FEATURE_COUNT_MISMATCH,X.ColCount,fFeatureCount);
 
   var nSamples := X.RowCount;
   var classCount := fClassCount;
@@ -7127,7 +7128,7 @@ begin
     CheckXForPredict(X);
 
   if X.ColCount <> fFeatureCount then
-    DimensionError(ER_FEATURE_COUNT_MISMATCH);
+    DimensionError(ER_FEATURE_COUNT_MISMATCH,X.ColCount,fFeatureCount);
 
   var total := fEstimators.Count;
 
@@ -7318,7 +7319,7 @@ begin
   if fClassLabels = nil then
     ArgumentError(ER_CLASSES_NOT_AVAILABLE);
 
-  Result := fClassLabels;
+  Result := Copy(fClassLabels);
 end;
 
 //-----------------------------
@@ -7344,7 +7345,7 @@ begin
     CheckXForPredict(X);
 
   if X.ColCount <> fXTrain.ColCount then
-    DimensionError(ER_FEATURE_COUNT_MISMATCH);
+    DimensionError(ER_FEATURE_COUNT_MISMATCH,X.ColCount,fXTrain.ColCount);
 end;
 
 function KNNBase.SquaredL2(trainRow: integer; XTest: Matrix; testRow: integer): double;
@@ -7532,7 +7533,7 @@ begin
     ArgumentNullError(ER_Y_NULL);
 
   if X.RowCount <> y.Length then
-    DimensionError(ER_XY_SIZE_MISMATCH);
+    DimensionError(ER_XY_SIZE_MISMATCH,X.RowCount,y.Length);
 
   if X.RowCount = 0 then
     ArgumentError(ER_EMPTY_DATASET);
@@ -7900,7 +7901,7 @@ begin
   if fClassLabels = nil then
     ArgumentError(ER_CLASSES_NOT_AVAILABLE);
 
-  Result := fClassLabels;
+  Result := Copy(fClassLabels);
 end;    
 
 
@@ -7922,7 +7923,7 @@ begin
     ArgumentNullError(ER_Y_NULL);
 
   if X.RowCount <> y.Length then
-    DimensionError(ER_XY_SIZE_MISMATCH);
+    DimensionError(ER_XY_SIZE_MISMATCH,X.RowCount,y.Length);
 
   if X.RowCount = 0 then
     ArgumentError(ER_EMPTY_DATASET);
@@ -8076,13 +8077,8 @@ begin
   fNInit := nInit;
 
   // --- seed (единый стиль)
-  fRandomSeed := seed;
-  fUserProvidedSeed := seed >= 0;
-
-  if fUserProvidedSeed then
-    fRng := new System.Random(seed)
-  else
-    fRng := new System.Random;
+  fRandomSeed := ResolveRandomSeed(seed, fUserProvidedSeed);
+  fRng := new System.Random(fRandomSeed);
 
   // --- state
   fFitted := False;
@@ -8636,7 +8632,7 @@ begin
     ArgumentNullError(ER_Y_NULL);
 
   if X.RowCount <> y.Length then
-    DimensionError(ER_XY_SIZE_MISMATCH);
+    DimensionError(ER_XY_SIZE_MISMATCH,X.RowCount,y.Length);
 
   if X.RowCount = 0 then
     ArgumentError(ER_EMPTY_DATASET);
@@ -8962,11 +8958,6 @@ begin
   fMean := X.ColumnMeans;
   fStd := X.ColumnStd;
 
-  // защита от нулевой дисперсии
-  for var j := 0 to fStd.Length - 1 do
-    if Abs(fStd[j]) < 1e-12 then
-      fStd[j] := 1.0;
-
   fFitted := true;
   Result := Self;
 end;
@@ -8980,7 +8971,7 @@ begin
     ArgumentNullError(ER_X_NULL);
 
   if X.ColCount <> fFeatureCount then
-    DimensionError(ER_FEATURE_COUNT_MISMATCH);
+    DimensionError(ER_FEATURE_COUNT_MISMATCH,X.ColCount,fFeatureCount);
 
   var n := X.RowCount;
   var p := X.ColCount;
@@ -8988,11 +8979,11 @@ begin
   Result := new Matrix(n, p);
 
   for var i := 0 to n - 1 do
-    for var j := 0 to p - 1 do
-      if fStd[j] <> 0 then
-        Result[i,j] := (X[i,j] - fMean[j]) / fStd[j]
-      else
-        Result[i,j] := 0.0;
+  for var j := 0 to p - 1 do
+    if Abs(fStd[j]) < 1e-12 then
+      Result[i,j] := 0.0
+    else
+      Result[i,j] := (X[i,j] - fMean[j]) / fStd[j];
 end;
 
 function StandardScaler.InverseTransform(X: Matrix): Matrix;
@@ -9004,7 +8995,7 @@ begin
     ArgumentNullError(ER_X_NULL);
 
   if X.ColCount <> fFeatureCount then
-    DimensionError(ER_FEATURE_COUNT_MISMATCH);
+    DimensionError(ER_FEATURE_COUNT_MISMATCH,X.ColCount,fFeatureCount);
 
   var n := X.RowCount;
   var p := X.ColCount;
@@ -9074,7 +9065,7 @@ begin
     ArgumentNullError(ER_X_NULL);
 
   if X.ColCount <> fFeatureCount then
-    DimensionError(ER_FEATURE_COUNT_MISMATCH);
+    DimensionError(ER_FEATURE_COUNT_MISMATCH,X.ColCount,fFeatureCount);
 
   var n := X.RowCount;
   var p := X.ColCount;
@@ -9113,7 +9104,7 @@ begin
     ArgumentNullError(ER_X_NULL);
 
   if X.ColCount <> fFeatureCount then
-    DimensionError(ER_FEATURE_COUNT_MISMATCH);
+    DimensionError(ER_FEATURE_COUNT_MISMATCH,X.ColCount,fFeatureCount);
 
   var n := X.RowCount;
   var p := X.ColCount;
@@ -9198,7 +9189,7 @@ begin
     ArgumentNullError(ER_X_NULL);
 
   if X.ColCount <> fFeatureCount then
-    DimensionError(ER_FEATURE_COUNT_MISMATCH);
+    DimensionError(ER_FEATURE_COUNT_MISMATCH,X.ColCount,fFeatureCount);
 
   var n := X.RowCount;
   var p := X.ColCount;
@@ -9275,7 +9266,7 @@ begin
     ArgumentNullError(ER_X_NULL);
 
   if X.ColCount <> fFeatureCount then
-    DimensionError(ER_FEATURE_COUNT_MISMATCH);
+    DimensionError(ER_FEATURE_COUNT_MISMATCH,X.ColCount,fFeatureCount);
 
   if fSelected = nil then
     Error(ER_MODEL_NOT_INITIALIZED);
@@ -9602,7 +9593,7 @@ begin
     ArgumentNullError(ER_X_NULL);
 
   if X.ColCount <> fFeatureCount then
-    DimensionError(ER_FEATURE_COUNT_MISMATCH);
+    DimensionError(ER_FEATURE_COUNT_MISMATCH,X.ColCount,fFeatureCount);
 
   if fSelected = nil then
     Error(ER_MODEL_NOT_INITIALIZED);
@@ -9671,7 +9662,7 @@ begin
     ArgumentNullError(ER_X_NULL);
 
   if X.ColCount <> fFeatureCount then
-    DimensionError(ER_FEATURE_COUNT_MISMATCH);
+    DimensionError(ER_FEATURE_COUNT_MISMATCH,X.ColCount,fFeatureCount);
 
   var n := X.RowCount;
   var p := X.ColCount;

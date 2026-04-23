@@ -166,6 +166,10 @@ type
     function Fit(X: Matrix): IUnsupervisedTransformer;
   end;
   
+  IColumnExpander = interface
+    function GetExpandedColumns(sourceColumn: string): array of string;
+  end;
+  
 implementation  
 
 end.

@@ -334,16 +334,35 @@ begin
 
   foreach var f in fFeatures do
   begin
-    if current.HasColumn(f) then
+    var expanded := false;
+
+    // ищем expander-ы В ПРЯМОМ порядке pipeline
+    for var i := 0 to fDataSteps.Count - 1 do
     begin
-      feats.Add(f);
-      continue;
+      var expander := fDataSteps[i] as IColumnExpander;
+      if expander = nil then
+        continue;
+
+      var cols := expander.GetExpandedColumns(f);
+      if (cols <> nil) and (cols.Length > 0) then
+      begin
+        foreach var c in cols do
+          if current.HasColumn(c) then
+            if not feats.Contains(c) then
+              feats.Add(c);
+
+        expanded := true;
+        break;
+      end;
     end;
 
-    foreach var c in current.Schema.ColumnNames do
-      if c.StartsWith(f + '_') then
-        if not feats.Contains(c) then
-          feats.Add(c);
+    if expanded then
+      continue;
+
+    // fallback: обычный столбец
+    if current.HasColumn(f) then
+      if not feats.Contains(f) then
+        feats.Add(f);
   end;
 
   if feats.Count = 0 then

@@ -32,7 +32,7 @@ const
   ER_XY_SIZE_MISMATCH =
     'Размеры X и y не совпадают: X={0}, y={1}!!X and y size mismatch: X={0}, y={1}';
   ER_FEATURE_COUNT_MISMATCH =
-    'Число признаков не совпадает!!Feature count mismatch';
+    'Число признаков не совпадает: {0} и {1}!!Feature count mismatch: {0}, {1}';
   ER_NAN_IN_X =  
     'X содержит NaN (пропуски)!!X contains NaN';  
   ER_NAN_IN_Y =

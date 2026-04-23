@@ -54,6 +54,7 @@ type
 implementation
 
 uses MLExceptions;
+uses MLUtilsABC;
 
 const
   ER_SCORE_FUNC_NULL = 
@@ -90,9 +91,8 @@ begin
 
   var resultVec := new Vector(p);
 
-  var baseSeed :=
-    if seed >= 0 then seed
-    else System.Environment.TickCount and integer.MaxValue;
+  var userProvidedSeed: boolean;
+  var baseSeed := ResolveRandomSeed(seed, userProvidedSeed);
 
   for var j := 0 to p - 1 do
   begin

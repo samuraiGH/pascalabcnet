@@ -88,7 +88,9 @@ type
     /// • clusterStd — базовое стандартное отклонение
     /// • clusterStdVar — разброс std между кластерами (0 → одинаковые)
     /// • centerBox — диапазон генерации центров [-centerBox, centerBox]
-    /// • classBalance — равномерность кластеров (0..1, 1 = равномерно)
+    /// • classBalance — равномерность распределения объектов по кластерам (0..1]
+    ///   • classBalance = 1.0  — строго равномерное распределение (детерминированное, не зависит от seed)
+    ///   • classBalance < 1.0  — случайное распределение; чем меньше значение, тем выше дисбаланс в среднем
     /// • noisePoints — число шумовых точек (outliers)
     /// • shuffle — перемешивание
     /// • seed — генератор (seed < 0 → случайный)
@@ -748,7 +750,7 @@ begin
   // --- вероятности кластеров
   var probs := new real[centers];
   
-  if classBalance = 1 then
+  if Abs(classBalance - 1.0) < 1e-12 then
   begin
     for var c := 0 to centers - 1 do
       probs[c] := 1.0 / centers;

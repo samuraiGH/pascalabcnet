@@ -4,6 +4,9 @@
 // Используется дисперсия генеральной совокупности (деление на n),
 // как принято в численных методах и алгоритмах машинного обучения.
 //
+// Исключение: Matrix.PCA использует (n-1) для ковариационной матрицы
+// согласно статистической политике MLABC (пункт 3).
+//
 // См. статистическую политику в модуле MLABC.
 // =============================================================
 
@@ -339,7 +342,8 @@ const
     'Матрица вырождена или плохо обусловлена!!Matrix is singular or ill-conditioned';
   ER_EMPTY_MATRIX =
     'Матрица пуста!!Matrix is empty';    
-    
+  ER_EIGEN_NOT_CONVERGED =
+    'EigenSymmetric: не сошлось за {0} итераций (off={1}, tol={2})!!EigenSymmetric did not converge in {0} iterations (off={1}, tol={2})';    
   
 type
   MLNotSPDException = class(MLException);
@@ -1276,10 +1280,11 @@ begin
   var M := Clone;
   var V := Matrix.Identity(n);
   
+  var off := 0.0;
   for var iter := 0 to maxIter - 1 do
   begin
     // --- Норма вне-диагонали
-    var off := 0.0;
+    off := 0.0;
     for var i := 0 to n - 1 do
       for var j := i + 1 to n - 1 do
         off += M[i, j] * M[i, j];
@@ -1357,6 +1362,12 @@ begin
       V[k, q] := s * vkp + c * vkq;
     end;
   end;
+  
+  var offNorm := Sqrt(off);
+
+  if offNorm >= tol then
+    Error(ER_EIGEN_NOT_CONVERGED, maxIter, offNorm, tol);
+
   
   // --- Eigenvalues
   var values := new Vector(n);
@@ -1449,7 +1460,8 @@ begin
     end;
 
   // --- Eigen
-  var (values, V) := C.EigenSymmetric;
+  var adaptiveIter := Max(100, n * n * 10);
+  var (values, V) := C.EigenSymmetric(1e-12, adaptiveIter);
 
   // --- Выбор k компонент
   var components := new Matrix(n, k);

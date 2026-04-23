@@ -5,6 +5,24 @@ interface
 uses LinearAlgebraML, MLCoreABC;
 
 type
+/// Методы для разбиения данных и оценки моделей.
+///
+/// Содержит утилиты для:
+/// • разделения выборки на обучающую и тестовую (TrainTestSplit)
+/// • k-fold кросс-валидации (KFold)
+/// • стратифицированной кросс-валидации (StratifiedKFold)
+/// • оценки моделей через кросс-валидацию (CrossValidate, StratifiedCrossValidate)
+///
+/// Методы возвращают индексы или подвыборки без изменения исходных данных.
+///
+/// • KFold — простое разбиение без учёта распределения классов
+/// • StratifiedKFold — сохраняет пропорции классов в каждом fold (для классификации)
+///
+/// Для стратифицированных методов требуется:
+/// • целочисленные метки классов
+/// • число объектов каждого класса ≥ числа фолдов
+///
+/// Все методы используют генератор случайных чисел (seed) для воспроизводимости
   Validation = static class
   private  
     static function CrossValidateCore(model: ISupervisedModel; 
@@ -93,6 +111,7 @@ type
 implementation
 
 uses MLExceptions;
+uses MLUtilsABC;
 
 const
   ER_DIM_MISMATCH_TRAIN_TEST =
@@ -114,7 +133,9 @@ const
     'At least 2 samples are required for {0}';
   ER_STRATIFIED_CLASS_TOO_SMALL =
     'Класс {0} содержит {1} объектов, что меньше числа фолдов ({2})!!Class {0} has {1} samples, which is less than the number of folds ({2})';    
-    
+  ER_STRATIFIED_K_TOO_LARGE =
+    'Stratified CV: число фолдов ({0}) превышает минимальный размер класса ({1})!!Stratified CV: number of folds ({0}) exceeds smallest class size ({1})';    
+
 //-----------------------------
 //         Validation
 //-----------------------------
@@ -263,12 +284,8 @@ begin
     var trainSize := n - size;
     var trainIdx := new integer[trainSize];
 
-    if start > 0 then
-      System.Array.Copy(idx, 0, trainIdx, 0, start);
-
-    var tailCount := n - (start + size);
-    if tailCount > 0 then
-      System.Array.Copy(idx, start + size, trainIdx, start, tailCount);
+    System.Array.Copy(idx, 0, trainIdx, 0, start);
+    System.Array.Copy(idx, start + size, trainIdx, start, n - (start + size));
 
     yield (trainIdx, testIdx);
 
@@ -442,6 +459,17 @@ begin
 
   if (k < 2) or (k > X.RowCount) then
     ArgumentError(ER_K_INVALID_STRATIFIED, k, X.RowCount);
+ 
+  var labels := y.ToIntArray;
+  var classCounts := labels.EachCount;
+
+  var minCount := integer.MaxValue;
+  foreach var pair in classCounts do
+    if pair.Value < minCount then
+      minCount := pair.Value;
+  
+  if k > minCount then
+    ArgumentError(ER_STRATIFIED_K_TOO_LARGE, k, minCount); 
 
   var baseSeed :=
     if seed >= 0 then seed
