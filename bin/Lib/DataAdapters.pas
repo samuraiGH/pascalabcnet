@@ -14,9 +14,6 @@ uses LinearAlgebraML;
 const
   ER_TO_MATRIX_NO_COLUMNS =
     'ToMatrix: не указаны столбцы!!ToMatrix: no columns specified';
-  ER_TO_VECTOR_NON_NUMERIC =
-    'ToVector: столбец "{0}" содержит нечисловые или NA значения!!' +
-    'ToVector: column "{0}" contains non-numeric or NA values';  
   ER_TO_MATRIX_NON_NUMERIC =
     'Столбец "{0}" содержит нечисловые или NA значения!!Column "{0}" contains non-numeric or NA values';
   ER_ENCODELABELS_COLUMN_NOT_STRING =

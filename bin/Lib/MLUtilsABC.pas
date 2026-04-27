@@ -97,9 +97,11 @@ uses MLExceptions;
 
 const
   ER_LABELS_NULL =
-    'y не может быть nil!!y cannot be nil';
+    '{0} не может быть nil!!{0} cannot be nil';
   ER_LABELS_ARRAY_NULL =
     'labels не может быть nil!!labels cannot be nil';
+  ER_LABELS_NOT_INTEGER =
+    'Метки классов должны быть целыми числами!!Class labels must be integers';
   ER_UNKNOWN_CLASS_IN_TRANSFORM =
     'Неизвестное значение класса "{0}" при преобразовании меток!!Unknown class value "{0}" in TransformLabels';
   ER_LABEL_INDEX_OUT_OF_RANGE =
@@ -128,7 +130,15 @@ begin
   Result := new integer[y.Length];
 
   for var i := 0 to y.Length - 1 do
-    Result[i] := Round(y[i]);
+  begin
+    var r := y[i];
+    var ir := Round(r);
+
+    if Abs(r - ir) > 1e-12 then
+      ArgumentError(ER_LABELS_NOT_INTEGER);
+
+    Result[i] := ir;
+  end;
 end;
 
 function IntsToLabels(a: array of integer): Vector;
@@ -151,7 +161,7 @@ begin
   for var i := 0 to labels.Length - 1 do
   begin
     var lbl := labels[i];
-    if not map.ContainsKey(lbl) then
+    if lbl not in map then
     begin
       map[lbl] := classList.Count;
       classList.Add(lbl);
@@ -182,7 +192,7 @@ begin
   begin
     var lbl := labels[i];
 
-    if not map.ContainsKey(lbl) then
+    if lbl not in map then
       Error(ER_UNKNOWN_CLASS_IN_TRANSFORM, lbl);
 
     res[i] := map[lbl];
@@ -210,7 +220,7 @@ begin
   begin
     var v := labels[i];
 
-    if not map.ContainsKey(v) then
+    if v not in map then
       Error(ER_UNKNOWN_CLASS_IN_TRANSFORM, v);
 
     res[i] := map[v];
@@ -237,7 +247,7 @@ begin
   for var i := 0 to labels.Length - 1 do
   begin
     var lbl := labels[i];
-    if not map.ContainsKey(lbl) then
+    if lbl not in map then
     begin
       map[lbl] := classList.Count;
       classList.Add(lbl);
@@ -276,7 +286,7 @@ begin
   var res := new List<string>;
 
   for var i := 0 to labels.Length - 1 do
-    if not seen.Contains(labels[i]) then
+    if labels[i] not in seen then
     begin
       seen.Add(labels[i]);
       res.Add(labels[i]);

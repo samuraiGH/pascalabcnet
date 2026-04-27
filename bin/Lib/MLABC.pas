@@ -94,6 +94,7 @@ type
   LinearRegression = MLModelsABC.LinearRegression;
   LogisticRegression = MLModelsABC.LogisticRegression;
   RidgeRegression = MLModelsABC.RidgeRegression;
+  LassoRegression = MLModelsABC.LassoRegression;
   ElasticNet = MLModelsABC.ElasticNet;
   DecisionTreeClassifier = MLModelsABC.DecisionTreeClassifier;
   DecisionTreeRegressor = MLModelsABC.DecisionTreeRegressor;
@@ -148,7 +149,16 @@ const
   jkRight = JoinKind.jkRight;
   jkFull = JoinKind.jkFull;
 
+  /// Преобразует вектор меток классов в массив целых чисел.
+  /// Значения округляются функцией Round, чтобы устранить
+  ///   возможные небольшие численные ошибки 
   function LabelsToInts(y: Vector): array of integer;
+  
+  /// Кодирует строковые метки классов в целочисленные индексы.
+  /// Каждому уникальному значению присваивается номер 0,1,2,...
+  /// Порядок кодирования соответствует порядку первого появления меток.
+  /// Используется при обучении моделей и визуализации.
+  /// Предполагается, что входные данные уже очищены от пропущенных значений.
   function EncodeLabels(labels: array of string): array of integer;
 
   

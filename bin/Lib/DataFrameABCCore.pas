@@ -108,7 +108,7 @@ type
   /// Столбец целых чисел
   IntColumn = class(Column)
     // Data и IsValid считаются immutable после создания
-    Data: array of integer;     // Данные столбца
+    Data: array of integer;     
   public
     constructor Create; begin end;
     constructor Create(name: string);
@@ -120,7 +120,7 @@ type
   
   /// Столбец вещественных чисел
   FloatColumn = class(Column)
-    Data: array of real;        // Данные столбца
+    Data: array of real;        
   public  
     constructor Create; begin end;
     constructor Create(name: string);
@@ -133,7 +133,7 @@ type
 
   /// Столбец строк
   StrColumn = class(Column)
-    Data: array of string;      // Данные столбца
+    Data: array of string;      
   public
     constructor Create; begin end;
     constructor Create(name: string);
@@ -142,15 +142,11 @@ type
     function TryGetNumericValue(i: integer; var value: real): boolean; override;
     /// Возвращает количество строк в столбце
     function RowCount: integer; override := Data.Length;
-    /// Добавляет невалидное (NA) значение в конец столбца
-    //procedure AppendInvalid; override;
-    /// Добавляет значение из курсора в указанной позиции
-    //procedure AppendFromCursor(cur: DataFrameCursor; colIndex: integer); override;
   end;
 
   /// Столбец булевых значений
   BoolColumn = class(Column)
-    Data: array of boolean;     // Данные столбца
+    Data: array of boolean;     
   public  
     constructor Create; begin end;
     constructor Create(name: string);
@@ -780,15 +776,20 @@ begin
   var n := cols.Length;
   colCnt := cols.Length;
 
-  SetLength(intAcc, n);
-  SetLength(floatAcc, n);
-  SetLength(strAcc, n);
-  SetLength(boolAcc, n);
-  SetLength(validAcc, n);
+  intAcc := new IntAccessor[n];
+  floatAcc := new FloatAccessor[n];
+  strAcc := new StrAccessor[n];
+  boolAcc := new BoolAccessor[n];
+  validAcc := new ValidAccessor[n];
 
   for var i := 0 to n - 1 do
   begin
     var col := cols[i];
+
+    intAcc[i] := NotInt;
+    floatAcc[i] := NotFloat;
+    strAcc[i] := NotStr;
+    boolAcc[i] := NotBool;
 
     case fSchema.ColumnTypeAt(i) of
       ctInt:
@@ -806,7 +807,6 @@ begin
         validAcc[i] := pos -> c.IsValid[pos];
     
         floatAcc[i] := pos -> c.Data[pos];
-        intAcc[i] := NotInt;
       end;
     
       ctStr:

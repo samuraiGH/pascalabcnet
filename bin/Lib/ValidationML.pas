@@ -96,6 +96,9 @@ type
     /// • лучший параметр,
     /// • лучшее среднее значение метрики,
     /// • модель, обученная на всём датасете с лучшим параметром
+    /// 
+    /// Все параметры оцениваются на одном и том же разбиении данных
+    /// (используется фиксированный seed), что обеспечивает корректное и сопоставимое сравнение моделей
     class function Search<T, P>(
       modelFactory: P -> T;
       paramValues: array of P;
@@ -460,17 +463,6 @@ begin
   if (k < 2) or (k > X.RowCount) then
     ArgumentError(ER_K_INVALID_STRATIFIED, k, X.RowCount);
  
-  var labels := y.ToIntArray;
-  var classCounts := labels.EachCount;
-
-  var minCount := integer.MaxValue;
-  foreach var pair in classCounts do
-    if pair.Value < minCount then
-      minCount := pair.Value;
-  
-  if k > minCount then
-    ArgumentError(ER_STRATIFIED_K_TOO_LARGE, k, minCount); 
-
   var baseSeed :=
     if seed >= 0 then seed
     else System.Environment.TickCount and integer.MaxValue;

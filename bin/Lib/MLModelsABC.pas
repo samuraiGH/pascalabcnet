@@ -10,7 +10,7 @@
 ///
 /// Все алгоритмы работают с числовыми данными:
 /// X — Matrix (объекты × признаки), y — Vector (целевая переменная).
-unit MLModelsABC;
+unit MLModelsABC;      
 
 // =============================================================
 // СТАТИСТИЧЕСКОЕ СОГЛАШЕНИЕ (MLModelsABC)
@@ -110,20 +110,8 @@ type
     
     function ToString: string; override;
 
-/// Создаёт копию модели с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
-///   • гарантирует независимое переобучение моделей
-///
-/// Примечание:
-///   • для копирования обученной модели следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)    
+/// Копирует только конфигурацию модели (без обученного состояния).
+/// Используется для создания независимых экземпляров модели.
     function Clone: IModel;
     
     function Name: string := Self.GetType.Name;
@@ -135,7 +123,7 @@ type
 /// Устойчива к мультиколлинеарности и плохо обусловленным данным.
 /// Используется при коррелированных признаках
 /// и в задачах, где важна численная стабильность решения
-  RidgeRegression = class(IRegressor)
+  RidgeRegression = class(IRegressor) 
   private
     fLambda: real;
     fCoef: Vector;
@@ -175,22 +163,10 @@ type
     /// После вызова Fit значение становится true.
     property IsFitted: boolean read fFitted;
     
-    function ToString: string; override;
+    function ToString: string; override;   
     
-/// Создаёт копию модели с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
-///   • гарантирует независимое переобучение моделей
-///
-/// Примечание:
-///   • для копирования обученной модели следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)   
+/// Копирует только конфигурацию модели (без обученного состояния).
+/// Используется для создания независимых экземпляров модели.
     function Clone: IModel;
     
     function Name: string := Self.GetType.Name;
@@ -255,20 +231,8 @@ type
     
     function ToString: string; override;
     
-/// Создаёт копию модели с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
-///   • гарантирует независимое переобучение моделей
-///
-/// Примечание:
-///   • для копирования обученной модели следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)   
+/// Копирует только конфигурацию модели (без обученного состояния).
+/// Используется для создания независимых экземпляров модели.
     function Clone: IModel;
     
     function Name: string := Self.GetType.Name;
@@ -310,20 +274,8 @@ type
       /// Возвращает вектор предсказаний длины nSamples.
       function Predict(X: Matrix): Vector;
   
-/// Создаёт копию модели с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
-///   • гарантирует независимое переобучение моделей
-///
-/// Примечание:
-///   • для копирования обученной модели следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)   
+/// Копирует только конфигурацию модели (без обученного состояния).
+/// Используется для создания независимых экземпляров модели.
       function Clone: IModel;
       
       /// Показывает, была ли модель обучена.
@@ -421,20 +373,8 @@ type
     
     function GetClassLabels: array of string;
 
-/// Создаёт копию модели с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
-///   • гарантирует независимое переобучение моделей
-///
-/// Примечание:
-///   • для копирования обученной модели следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)   
+/// Копирует только конфигурацию модели (без обученного состояния).
+/// Используется для создания независимых экземпляров модели.
     function Clone: IModel;
   end;
   
@@ -573,13 +513,6 @@ type
     function FindBestSplit(X: Matrix; y: Vector; indices: array of integer;
       var bestF: integer; var bestT: real): boolean;
 
-    procedure Split(
-      X: Matrix; y: Vector;
-      f: integer; t: real;
-      var Xl: Matrix; var yl: Vector;
-      var Xr: Matrix; var yr: Vector
-    );
-    
     function MajorityClass(y: Vector; indices: array of integer): integer;
   public
     property FeatureImportances: Vector read GetFeatureImportances;
@@ -656,20 +589,8 @@ type
 /// Для классификации — метки классов.
     function Predict(X: Matrix): Vector; virtual; abstract;
 
-/// Создаёт копию модели с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
-///   • гарантирует независимое переобучение моделей
-///
-/// Примечание:
-///   • для копирования обученной модели следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)       
+/// Копирует только конфигурацию модели (без обученного состояния).
+/// Используется для создания независимых экземпляров модели.
     function Clone: IModel; virtual; abstract;
 
 /// Возвращает true, если дерево обучено.
@@ -748,20 +669,8 @@ type
 /// Если false — Predict вызовет ошибку.
     property IsFitted: boolean read fFitted;
 
-/// Создаёт копию модели с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
-///   • гарантирует независимое переобучение моделей
-///
-/// Примечание:
-///   • для копирования обученной модели следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)   
+/// Копирует только конфигурацию модели (без обученного состояния).
+/// Используется для создания независимых экземпляров модели.
     function Clone: IModel; 
   end;
   
@@ -816,20 +725,8 @@ type
 /// Возвращает вектор вещественных значений.
     function Predict(X: Matrix): Vector; override;
 
-/// Создаёт копию модели с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
-///   • гарантирует независимое переобучение моделей
-///
-/// Примечание:
-///   • для копирования обученной модели следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)   
+/// Копирует только конфигурацию модели (без обученного состояния).
+/// Используется для создания независимых экземпляров модели.
     function Clone: IModel; override;
     
 /// Возвращает строковое представление модели.
@@ -925,20 +822,8 @@ type
 /// В классификации — голосование (majority vote) или усреднение вероятностей.    
     function Predict(X: Matrix): Vector; virtual; abstract;
 
-/// Создаёт копию модели с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
-///   • гарантирует независимое переобучение моделей
-///
-/// Примечание:
-///   • для копирования обученной модели следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)   
+/// Копирует только конфигурацию модели (без обученного состояния).
+/// Используется для создания независимых экземпляров модели.
     function Clone: IModel; virtual; abstract;
     
 /// Возвращает вектор важности признаков.
@@ -994,20 +879,8 @@ type
 /// Итоговое значение — среднее предсказаний всех деревьев ансамбля.
     function Predict(X: Matrix): Vector; override;
 
-/// Создаёт копию модели с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
-///   • гарантирует независимое переобучение моделей
-///
-/// Примечание:
-///   • для копирования обученной модели следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)   
+/// Копирует только конфигурацию модели (без обученного состояния).
+/// Используется для создания независимых экземпляров модели.
     function Clone: IModel; override;
     
 /// Возвращает усредненную важность признаков по всем деревьям ансамбля.
@@ -1075,20 +948,8 @@ type
     /// Требует предварительного вызова Fit.
     function PredictProba(X: Matrix): Matrix;
 
-/// Создаёт копию модели с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
-///   • гарантирует независимое переобучение моделей
-///
-/// Примечание:
-///   • для копирования обученной модели следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)   
+/// Копирует только конфигурацию модели (без обученного состояния).
+/// Используется для создания независимых экземпляров модели.
     function Clone: IModel; override;
     
 /// Возвращает усредненную важность признаков по всем деревьям ансамбля.
@@ -1245,20 +1106,8 @@ type
 /// Используются все обученные деревья.
     function Predict(X: Matrix): Vector;
 
-/// Создаёт копию модели с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
-///   • гарантирует независимое переобучение моделей
-///
-/// Примечание:
-///   • для копирования обученной модели следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)   
+/// Копирует только конфигурацию модели (без обученного состояния).
+/// Используется для создания независимых экземпляров модели.
     function Clone: IModel;
     
 /// Обучает модель градиентного бустинга с использованием валидационной выборки.
@@ -1423,20 +1272,8 @@ type
     
     function GetClasses: array of real;
 
-/// Создаёт копию модели с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
-///   • гарантирует независимое переобучение моделей
-///
-/// Примечание:
-///   • для копирования обученной модели следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)   
+/// Копирует только конфигурацию модели (без обученного состояния).
+/// Используется для создания независимых экземпляров модели.
     function Clone: IModel;
 
 /// История значения LogLoss на обучающей выборке.
@@ -1534,20 +1371,8 @@ type
     /// Возвращает вектор предсказанных значений или меток
     function Predict(X: Matrix): Vector; virtual; abstract;
     
-/// Создаёт копию модели с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
-///   • гарантирует независимое переобучение моделей
-///
-/// Примечание:
-///   • для копирования обученной модели следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)   
+/// Копирует только конфигурацию модели (без обученного состояния).
+/// Используется для создания независимых экземпляров модели.
     function Clone: IModel; virtual; abstract;
     
     function Name: string := Self.GetType.Name;
@@ -1610,20 +1435,8 @@ type
     /// Возвращает массив меток классов в порядке столбцов PredictProba
     function GetClasses: array of real;
     
-/// Создаёт копию модели с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
-///   • гарантирует независимое переобучение моделей
-///
-/// Примечание:
-///   • для копирования обученной модели следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)   
+/// Копирует только конфигурацию модели (без обученного состояния).
+/// Используется для создания независимых экземпляров модели.
     function Clone: IModel; override;
     
     function Name: string := Self.GetType.Name;
@@ -1661,20 +1474,8 @@ type
     /// Возвращает вектор предсказанных значений
     function Predict(X: Matrix): Vector; override;
     
-/// Создаёт копию модели с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
-///   • гарантирует независимое переобучение моделей
-///
-/// Примечание:
-///   • для копирования обученной модели следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)   
+/// Копирует только конфигурацию модели (без обученного состояния).
+/// Используется для создания независимых экземпляров модели.
     function Clone: IModel; override;
     
     function Name: string := Self.GetType.Name;
@@ -1738,20 +1539,8 @@ type
     /// Выполняет обучение и сразу возвращает метки кластеров.
     function FitPredict(X: Matrix): array of integer;
 
-/// Создаёт копию модели с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
-///   • гарантирует независимое переобучение моделей
-///
-/// Примечание:
-///   • для копирования обученной модели следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)   
+/// Копирует только конфигурацию модели (без обученного состояния).
+/// Используется для создания независимых экземпляров модели.
     function Clone: IModel;
     
     /// Количество кластеров
@@ -1819,20 +1608,8 @@ type
     /// Возвращает метки после обучения.
     function FitPredict(X: Matrix): array of integer;
     
-/// Создаёт копию модели с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и Pipeline
-///   • гарантирует независимое переобучение моделей
-///
-/// Примечание:
-///   • для копирования обученной модели следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)   
+/// Копирует только конфигурацию модели (без обученного состояния).
+/// Используется для создания независимых экземпляров модели.
     function Clone: IModel;
   
     property Labels: array of integer read fLabels;
@@ -1976,16 +1753,8 @@ type
 /// Возвращает строковое представление пайплайна.
     function ToString: string; override;
 
-/// Создаёт копию пайплайна с теми же шагами и моделью.
-///
-/// ВАЖНО:
-///   • Clone копирует только конфигурацию (transformers и модель)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Все шаги и модель клонируются через их Clone (config-only)
-///
-/// Назначение:
-///   • использование в CrossValidate и Pipeline
-///   • обеспечивает независимое переобучение пайплайна    
+/// Копирует только конфигурацию пайплайна (без обученного состояния).
+/// Используется для создания независимых экземпляров пайплайна.
     function Clone: IModel;
     
     function Name: string := Self.GetType.Name;
@@ -2068,16 +1837,8 @@ type
 /// Возвращает строковое представление пайплайна.
     function ToString: string; override;
     
-/// Создаёт копию пайплайна с теми же шагами и моделью.
-///
-/// ВАЖНО:
-///   • Clone копирует только конфигурацию (transformers и модель)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Все шаги и модель клонируются через их Clone (config-only)
-///
-/// Назначение:
-///   • использование в CrossValidate и MatrixPipeline
-///   • обеспечивает независимое переобучение пайплайна    
+/// Копирует только конфигурацию пайплайна (без обученного состояния).
+/// Используется для создания независимых экземпляров пайплайна.
     function Clone: IModel;
     function Name: string := Self.GetType.Name;
   end;
@@ -2130,20 +1891,8 @@ type
 
     function ToString: string; override;
     
-/// Создаёт копию трансформера с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и MatrixPipeline
-///   • гарантирует независимое переобучение трансформеров
-///
-/// Примечание:
-///   • для копирования обученного трансформера следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)
+/// Копирует только конфигурацию трансформера (без обученного состояния).
+/// Используется для создания независимых экземпляров трансформера.
     function Clone: ITransformer;
   end;
   
@@ -2188,20 +1937,8 @@ type
 
     function ToString: string; override;
 
-/// Создаёт копию трансформера с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и MatrixPipeline
-///   • гарантирует независимое переобучение трансформеров
-///
-/// Примечание:
-///   • для копирования обученного трансформера следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)    
+/// Копирует только конфигурацию трансформера (без обученного состояния).
+/// Используется для создания независимых экземпляров трансформера.
     function Clone: ITransformer;
   end;
   
@@ -2242,20 +1979,8 @@ type
 
     function ToString: string; override;
 
-/// Создаёт копию трансформера с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и MatrixPipeline
-///   • гарантирует независимое переобучение трансформеров
-///
-/// Примечание:
-///   • для копирования обученного трансформера следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)    
+/// Копирует только конфигурацию трансформера (без обученного состояния).
+/// Используется для создания независимых экземпляров трансформера.
     function Clone: ITransformer;    
   end;
   
@@ -2295,20 +2020,8 @@ type
 
     function ToString: string; override;
     
-/// Создаёт копию трансформера с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и MatrixPipeline
-///   • гарантирует независимое переобучение трансформеров
-///
-/// Примечание:
-///   • для копирования обученного трансформера следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)    
+/// Копирует только конфигурацию трансформера (без обученного состояния).
+/// Используется для создания независимых экземпляров трансформера.
     function Clone: ITransformer;
   end;
   
@@ -2392,20 +2105,8 @@ type
 /// Возвращает строковое представление трансформера
     function ToString: string; override;
 
-/// Создаёт копию трансформера с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и MatrixPipeline
-///   • гарантирует независимое переобучение трансформеров
-///
-/// Примечание:
-///   • для копирования обученного трансформера следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)
+/// Копирует только конфигурацию трансформера (без обученного состояния).
+/// Используется для создания независимых экземпляров трансформера.
     function Clone: ITransformer;
   end;
   
@@ -2450,20 +2151,8 @@ type
 /// Возвращает строковое представление трансформера
     function ToString: string; override;
     
-/// Создаёт копию трансформера с теми же гиперпараметрами.
-///
-/// ВАЖНО:
-///   • Clone копирует ТОЛЬКО конфигурацию (hyperparameters)
-///   • Clone НЕ копирует обученное состояние (fitted state)
-///   • Возвращаемый объект эквивалентен новому экземпляру после Create(...)
-///
-/// Назначение:
-///   • использование в CrossValidate, GridSearch и MatrixPipeline
-///   • гарантирует независимое переобучение трансформеров
-///
-/// Примечание:
-///   • для копирования обученного трансформера следует использовать отдельные механизмы
-///     (сериализация, ModelIO и т.п.)
+/// Копирует только конфигурацию трансформера (без обученного состояния).
+/// Используется для создания независимых экземпляров трансформера.
     function Clone: ITransformer;
   end;
   
@@ -3226,18 +2915,7 @@ begin
   var p := X.ColCount;
 
   // --- convert to integer labels
-  var yInt := new integer[m];
-  
-  for var i := 0 to m - 1 do
-  begin
-    var r := y[i];
-    var ir := Round(r);
-  
-    if Abs(r - ir) > 1e-12 then
-      ArgumentError(ER_LABELS_NOT_INTEGER);
-  
-    yInt[i] := ir;
-  end;
+  var yInt := LabelsToInts(y);
   
   // --- encode (порядок первого появления)
   var unique: array of integer;
@@ -4053,140 +3731,6 @@ begin
   Result.Right := right;
 end;
 
-procedure DecisionTreeCore.Split(X: Matrix; y: Vector; f: integer; t: real;
-  var Xl: Matrix; var yl: Vector;
-  var Xr: Matrix; var yr: Vector
-);
-begin
-  var leftIdx := new List<integer>;
-  var rightIdx := new List<integer>;
-
-  // 1. Разделяем индексы
-  for var i := 0 to X.RowCount - 1 do
-    if X[i, f] <= t then
-      leftIdx.Add(i)
-    else
-      rightIdx.Add(i);
-
-  // 2. Формируем подматрицы и подвекторы
-  var leftArr := leftIdx.ToArray;
-  var rightArr := rightIdx.ToArray;
-
-  Xl := X.TakeRows(leftArr);
-  yl := y.SubvectorBy(leftArr);
-
-  Xr := X.TakeRows(rightArr);
-  yr := y.SubvectorBy(rightArr);
-end;
-
-{function DecisionTreeCore.FindBestSplit(
-  X: Matrix;
-  y: Vector;
-  indices: array of integer;
-  var bestF: integer;
-  var bestT: real
-): boolean;
-begin
-  Result := false;
-
-  var n := indices.Length;
-  if n = 0 then exit;
-
-  var parentImp := fCriterion.Impurity(y, indices);
-
-  var bestScore := parentImp;
-
-  // --- выбор признаков (с учётом maxFeatures)
-  var featureCount := X.ColCount;
-  var features: array of integer;
-
-  if (fMaxFeatures > 0) and (fMaxFeatures < featureCount) then
-  begin
-    var perm := new integer[featureCount];
-    for var i := 0 to featureCount - 1 do
-      perm[i] := i;
-
-    for var i := 0 to fMaxFeatures - 1 do
-    begin
-      var j := i + fRng.Next(featureCount - i);
-      var tmp := perm[i];
-      perm[i] := perm[j];
-      perm[j] := tmp;
-    end;
-
-    SetLength(features, fMaxFeatures);
-    for var i := 0 to fMaxFeatures - 1 do
-      features[i] := perm[i];
-  end
-  else
-  begin
-    SetLength(features, featureCount);
-    for var i := 0 to featureCount - 1 do
-      features[i] := i;
-  end;
-
-  // --- перебор
-  for var fi := 0 to features.Length - 1 do
-  begin
-    var f := features[fi];
-    
-    var leftBuf := new integer[n];
-    var rightBuf := new integer[n];
-      
-    for var ii := 0 to n - 1 do
-    begin
-      var i := indices[ii];
-      var t := X[i, f];
-      
-      var lcnt := 0;
-      var rcnt := 0;
-      
-      for var jj := 0 to n - 1 do
-      begin
-        var j := indices[jj];
-      
-        if X[j, f] <= t then
-        begin
-          leftBuf[lcnt] := j;
-          lcnt += 1;
-        end
-        else
-        begin
-          rightBuf[rcnt] := j;
-          rcnt += 1;
-        end;
-      end;
-      
-      if (lcnt < fMinSamplesLeaf) or (rcnt < fMinSamplesLeaf) then
-        continue;
-      
-      // создаём массивы нужного размера
-      var leftIdx := new integer[lcnt];
-      var rightIdx := new integer[rcnt];
-      
-      for var i1 := 0 to lcnt - 1 do
-        leftIdx[i1] := leftBuf[i1];
-      
-      for var i1 := 0 to rcnt - 1 do
-        rightIdx[i1] := rightBuf[i1];
-
-      var leftImp := fCriterion.Impurity(y, leftIdx);
-      var rightImp := fCriterion.Impurity(y, rightIdx);
-
-      var score :=
-        (leftIdx.Length * leftImp + rightIdx.Length * rightImp) / n;
-
-      if score < bestScore then
-      begin
-        bestScore := score;
-        bestF := f;
-        bestT := t;
-        Result := true;
-      end;
-    end;
-  end;
-end;}
-
 // Новая реализация (O(n log n · p))
 function DecisionTreeCore.FindBestSplit(
   X: Matrix;
@@ -4737,19 +4281,7 @@ begin
   fFeatureImportances := new Vector(X.ColCount);
 
   // --- convert to integer labels
-  var m := y.Length;
-  var yInt := new integer[m];
-
-  for var i := 0 to m - 1 do
-  begin
-    var r := y[i];
-    var ir := Round(r);
-
-    if Abs(r - ir) > 1e-12 then
-      ArgumentError(ER_LABELS_NOT_INTEGER);
-
-    yInt[i] := ir;
-  end;
+  var yInt := LabelsToInts(y);
 
   // --- encode
   var classes: array of integer;
@@ -4947,17 +4479,9 @@ begin
 
   fFeatureImportances := new Vector(X.ColCount);
 
-  var indices: array of integer;
-
-  // 🔹 Ключевое изменение
-  if fRowIndices = nil then
-  begin
-    SetLength(indices, X.RowCount);
-    for var i := 0 to X.RowCount - 1 do
-      indices[i] := i;
-  end
-  else
-    indices := fRowIndices;
+  var indices: array of integer := fRowIndices;
+  if indices = nil then
+    indices := Arr(0..X.RowCount - 1);
 
   fRoot := BuildTree(X, y, indices, 0);
   
@@ -4978,12 +4502,10 @@ begin
   var node := fRoot;
 
   while not node.IsLeaf do
-  begin
     if X[rowIndex, node.FeatureIndex] <= node.Threshold then
       node := node.Left
     else
       node := node.Right;
-  end;
 
   Result := node.LeafValue;  // для регрессии это уже real
 end;
@@ -5034,7 +4556,6 @@ begin
 
   Result := s;
 end;
-
 
 //-----------------------------
 //      RandomForestBase 
@@ -5364,18 +4885,7 @@ begin
   // ЕДИНЫЙ ENCODING (forest-level)
   // =========================================================
 
-  var yInt := new integer[n];
-
-  for var i := 0 to n - 1 do
-  begin
-    var r := y[i];
-    var ir := Round(r);
-
-    if Abs(r - ir) > 1e-12 then
-      ArgumentError(ER_LABELS_NOT_INTEGER);
-
-    yInt[i] := ir;
-  end;
+  var yInt := LabelsToInts(y);
 
   var yEncArr := EncodeLabelsInt(yInt, fIndexToClass);
   fClassCount := fIndexToClass.Length;
@@ -5383,9 +4893,7 @@ begin
   if fClassCount < 2 then
     ArgumentError(ER_NEED_AT_LEAST_TWO_CLASSES);
 
-  var yEnc := new Vector(n);
-  for var i := 0 to n - 1 do
-    yEnc[i] := yEncArr[i];
+  var yEnc := new Vector(yEncArr);
 
   // =========================================================
 
@@ -6508,21 +6016,10 @@ begin
   var nTrain := XTrain.RowCount;
 
   // =========================================================
-  // НОВЫЙ ЕДИНЫЙ ENCODING
+  // Новый Encoding
   // =========================================================
 
-  var yTrainInt := new integer[nTrain];
-
-  for var i := 0 to nTrain - 1 do
-  begin
-    var r := yTrain[i];
-    var ir := Round(r);
-
-    if Abs(r - ir) > 1e-12 then
-      ArgumentError(ER_LABELS_NOT_INTEGER);
-
-    yTrainInt[i] := ir;
-  end;
+  var yTrainInt := LabelsToInts(yTrain);
 
   var yEncoded := EncodeLabelsInt(yTrainInt, fClasses);
 
@@ -6588,19 +6085,15 @@ begin
 
   if useValidation then
   begin
-    var nVal := yVal.Length;
+    var yValInt := LabelsToInts(yVal);
 
-    yValEncoded := new integer[nVal];
+    yValEncoded := new integer[yValInt.Length];
 
-    for var i := 0 to nVal - 1 do
+    for var i := 0 to yValInt.Length - 1 do
     begin
-      var r := yVal[i];
-      var ir := Round(r);
+      var ir := yValInt[i];
 
-      if Abs(r - ir) > 1e-12 then
-        ArgumentError(ER_LABELS_NOT_INTEGER);
-
-      if not fClassIndex.ContainsKey(ir) then
+      if ir not in fClassIndex then
         ArgumentError(ER_UNKNOWN_CLASS_LABEL, ir);
 
       yValEncoded[i] := fClassIndex[ir];
@@ -7350,7 +6843,7 @@ end;
 
 function KNNBase.SquaredL2(trainRow: integer; XTest: Matrix; testRow: integer): double;
 begin
-  var sum := 0.0;
+  var sum := 0.0; 
   var d := fXTrain.ColCount;
 
   var train := fXTrain;   // локальная ссылка
@@ -7556,18 +7049,7 @@ begin
   // ЕДИНЫЙ ENCODING
   // =========================================================
 
-  var yInt := new integer[n];
-
-  for var i := 0 to n - 1 do
-  begin
-    var r := y[i];
-    var ir := Round(r);
-
-    if Abs(r - ir) > 1e-12 then
-      ArgumentError(ER_LABELS_NOT_INTEGER);
-
-    yInt[i] := ir;
-  end;
+  var yInt := LabelsToInts(y);
 
   var classesInt: array of integer;
   var yEncArr := EncodeLabelsInt(yInt, classesInt);
@@ -9364,16 +8846,13 @@ begin
   var classToIndex := new Dictionary<integer, integer>;
   var uniqueClasses := new List<integer>;
   var yEncoded := new integer[n];
+  var yInt := LabelsToInts(y);
 
   for var i := 0 to n - 1 do
   begin
-    var r := y[i];
-    var ir := Round(r);
+    var ir := yInt[i];
 
-    if Abs(r - ir) > 1e-12 then
-      ArgumentError(ER_LABELS_NOT_INTEGER);
-
-    if not classToIndex.ContainsKey(ir) then
+    if ir not in classToIndex then
     begin
       classToIndex[ir] := uniqueClasses.Count;
       uniqueClasses.Add(ir);
@@ -9454,16 +8933,13 @@ begin
   var classToIndex := new Dictionary<integer, integer>;
   var uniqueClasses := new List<integer>;
   var yEncoded := new integer[n];
+  var yInt := LabelsToInts(y);
 
   for var i := 0 to n - 1 do
   begin
-    var r := y[i];
-    var ir := Round(r);
+    var ir := yInt[i];
 
-    if Abs(r - ir) > 1e-12 then
-      ArgumentError(ER_LABELS_NOT_INTEGER);
-
-    if not classToIndex.ContainsKey(ir) then
+    if ir not in classToIndex then
     begin
       classToIndex[ir] := uniqueClasses.Count;
       uniqueClasses.Add(ir);

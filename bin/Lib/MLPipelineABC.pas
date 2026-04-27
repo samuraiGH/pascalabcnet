@@ -20,8 +20,23 @@ type
     fFitted: boolean;
 
     procedure ValidateSchema(df: DataFrame); virtual; abstract;
+    class procedure ValidateFeatureList(features: array of string);
+    
+    /// Вычисляет итоговый список признаков после всех DataFrame-преобразований.
+    ///
+    /// Для каждого исходного признака из fFeatures:
+    ///   • пытается получить расширенные столбцы через IColumnExpander;
+    ///   • если расширения нет, использует сам исходный столбец.
+    ///
+    /// Возвращает только те столбцы, которые реально присутствуют в current,
+    /// без повторов и в итоговом порядке для построения матрицы признаков.
+    ///
+    /// Если после preprocessing не осталось ни одного признака,
+    /// выбрасывается исключение
+    function ResolveFinalFeatures(current: DataFrame): array of string;
 
     function PrepareMatrix(df: DataFrame; var current: DataFrame): Matrix;
+    function TransformDataFrame(df: DataFrame): DataFrame;
     
     function FitTransformMatrix(var X: Matrix; y: Vector := nil): Matrix;
     
@@ -29,7 +44,7 @@ type
   public
     constructor Create;
     
-    /// Признак того, что был вызван Fit или FitTransform.
+    /// Признак того, что был вызван Fit.
     property IsFitted: boolean read fFitted;
   end;
   
@@ -45,11 +60,10 @@ type
   ///   • Затем — матричные шаги (ITransformer / ISupervisedTransformer).
   ///   • Модель (IModel) добавляется последней и может быть только одна.
   ///
-  /// В режиме с моделью используются:
+  /// В конвейере используются:
   ///   • features — признаки;
   ///   • target — целевая переменная.
   ///
-  /// Если модель не добавлена, DataPipeline работает как чистый DF-конвейер (Fit/Transform/FitTransform)  
   DataPipeline = class(PipelineBase, IModel)
   private
     fModel: ISupervisedModel;
@@ -67,7 +81,7 @@ type
     ///   • IPreprocessor (DataFrame-уровень)
     ///   • ITransformer (Matrix-уровень)
     ///   • ISupervisedModel (модель, должна быть последней)
-    /// Запрещено добавлять шаги после вызова Fit/FitTransform.
+    /// Запрещено добавлять шаги после вызова Fit.
     function Add(step: IPipelineStep): DataPipeline;
     
     /// Строит конвейер из шагов обработки данных и модели.
@@ -90,16 +104,18 @@ type
     ///     затем обучает матричные трансформеры и модель.
     function Fit(df: DataFrame): DataPipeline;
     
-    /// Применяет обученные DataFrame-шаги к DataFrame и возвращает новый DataFrame.
-    /// В ML-режиме Transform не выполняет матричные шаги и не вызывает модель.
+    /// Применяет только обученные DataFrame-шаги pipeline и возвращает новый DataFrame.
+    ///
+    /// Матричные шаги и модель при этом не используются.
+    /// Метод предназначен в основном для просмотра и анализа промежуточного
+    /// результата preprocessing.
+    ///
+    /// Полученный DataFrame обычно не следует повторно подавать в тот же pipeline,
+    /// так как DataFrame-преобразования будут выполнены ещё раз.
     function Transform(df: DataFrame): DataFrame;
     
-    /// Выполняет Fit и Transform за один проход для DataFrame-режима.
-    /// Недоступен, если конвейер содержит модель (IModel).
-    function FitTransform(df: DataFrame): DataFrame;
-    
     /// Делает предсказание модели для объектов из DataFrame.
-    /// Доступен только если конвейер содержит модель (IModel) и был обучен (Fit).
+    /// Доступен после обучения конвейера (Fit).
     function Predict(df: DataFrame): Vector;
     
     /// Возвращает матрицу вероятностей (nSamples × nClasses).
@@ -133,8 +149,6 @@ type
   /// В конвейере используются:
   ///   • features — признаки (целевая переменная отсутствует).
   ///
-  /// Если модель не добавлена, UDataPipeline работает как чистый DF-конвейер
-  /// (Fit/Transform/FitTransform)
   UDataPipeline = class(PipelineBase, IModel)
   private
     fModel: IUnsupervisedModel;
@@ -161,13 +175,16 @@ type
     /// Обучает конвейер на DataFrame.
     function Fit(df: DataFrame): UDataPipeline;
   
-    /// Применяет обученные DataFrame-шаги к DataFrame и возвращает новый DataFrame.
+    /// Применяет только обученные DataFrame-шаги pipeline и возвращает новый DataFrame.
+    ///
+    /// Матричные шаги и модель при этом не используются.
+    /// Метод предназначен в основном для просмотра и анализа промежуточного
+    /// результата preprocessing.
+    ///
+    /// Полученный DataFrame обычно не следует повторно подавать в тот же pipeline,
+    /// так как DataFrame-преобразования будут выполнены ещё раз.
     function Transform(df: DataFrame): DataFrame;
   
-    /// Выполняет Fit и Transform за один проход для DataFrame-режима.
-    /// Недоступен, если конвейер содержит модель (IModel).
-    function FitTransform(df: DataFrame): DataFrame;
-    
     /// Обучает конвейер и сразу возвращает метки кластеров.
     /// 
     /// Выполняет полный pipeline:
@@ -177,7 +194,7 @@ type
     /// Используется для задач кластеризации, где нет разделения на train/test.
     /// 
     /// Доступен только если:
-    ///   • конвейер содержит модель кластеризации (IClusterer).
+    ///   • конечная модель поддерживает кластеризацию (IClusterer).
     function FitPredict(df: DataFrame): array of integer;
   
     /// Делает предсказание модели для объектов из DataFrame.
@@ -189,8 +206,7 @@ type
     /// затем применяет обученную модель кластеризации.
     /// 
     /// Доступен только если:
-    ///   • конвейер содержит модель (IModel);
-    ///   • модель поддерживает кластеризацию (IClusterer);
+    ///   • конечная модель поддерживает кластеризацию (IClusterer);
     ///   • конвейер был обучен (Fit).
     function PredictLabels(df: DataFrame): array of integer;
   
@@ -219,11 +235,6 @@ const
     'Матричный шаг не может идти после модели!!Matrix step cannot appear after the model';
   ER_DATAPIPE_UNKNOWN_STEP_TYPE =
     'Неизвестный тип шага конвейера: {0}!!Unknown pipeline step type: {0}';
-  ER_TO_VECTOR_NON_NUMERIC =
-    'ToVector: столбец "{0}" содержит нечисловые или NA значения!!' +
-    'ToVector: column "{0}" contains non-numeric or NA values';  
-  ER_FITTRANSFORM_WITH_MODEL =
-    'FitTransform недоступен, если конвейер содержит модель!!FitTransform is not available when the pipeline contains a model';
   ER_PROBA_NOT_SUPPORTED =
     'Модель не поддерживает предсказание вероятностей!!Model does not support probability prediction';
   ER_TARGET_EMPTY =
@@ -275,6 +286,8 @@ const
     'LabelEncoder нельзя применять к целевой переменной — кодирование выполняется внутри модели!!LabelEncoder cannot be applied to target — encoding is handled internally by the model';
   ER_ENCODELABELS_NOT_CATEGORICAL =
     'Целевой столбец должен быть категориальным для задач классификации!!Target column must be categorical for classification tasks';
+  ER_REGRESSION_TARGET_MUST_BE_NUMERIC =
+    'Целевой столбец "{0}" должен быть числовым для задач регрессии!!Target column "{0}" must be numeric for regression tasks';
   ER_PIPELINE_TARGET_TRANSFORM_NOT_ALLOWED =
     'Преобразование целевой переменной "{0}" запрещено в DataPipeline!!' +
     'Transformation of target variable "{0}" is not allowed in DataPipeline';    
@@ -312,24 +325,30 @@ begin
   fFitted := false;
 end;
 
-function PipelineBase.PrepareMatrix(df: DataFrame; var current: DataFrame): Matrix;
+class procedure PipelineBase.ValidateFeatureList(features: array of string);
 begin
-  if df = nil then
-    ArgumentNullError(ER_ARG_NULL, 'df');
+  if (features = nil) or (features.Length = 0) then
+    ArgumentError(ER_FEATURES_EMPTY);
 
-  current := df;
+  var seen := new HashSet<string>;
 
-  // --- schema
-  ValidateSchema(current);
-
-  // --- DataFrame steps
-  for var i := 0 to fDataSteps.Count - 1 do
+  foreach var f in features do
   begin
-    fDataSteps[i] := fDataSteps[i].Fit(current);
-    current := fDataSteps[i].Transform(current);
-  end;
+    if (f = nil) or (f = '') then
+      ArgumentError(ER_FEATURE_EMPTY);
 
-  // --- features
+    if f in seen then
+      ArgumentError(ER_DATAPIPE_DUPLICATE_FEATURE, f);
+
+    seen.Add(f);
+  end;
+end;
+
+function PipelineBase.ResolveFinalFeatures(current: DataFrame): array of string;
+begin
+  if current = nil then
+    ArgumentNullError(ER_ARG_NULL, 'current');
+
   var feats := new List<string>;
 
   foreach var f in fFeatures do
@@ -348,7 +367,7 @@ begin
       begin
         foreach var c in cols do
           if current.HasColumn(c) then
-            if not feats.Contains(c) then
+            if c not in feats then
               feats.Add(c);
 
         expanded := true;
@@ -361,16 +380,50 @@ begin
 
     // fallback: обычный столбец
     if current.HasColumn(f) then
-      if not feats.Contains(f) then
+      if f not in feats then
         feats.Add(f);
   end;
 
   if feats.Count = 0 then
     ArgumentError(ER_PIPELINE_NO_FEATURES);
 
-  fFinalFeatures := feats.ToArray;
+  Result := feats.ToArray;
+end;
+
+function PipelineBase.PrepareMatrix(df: DataFrame; var current: DataFrame): Matrix;
+begin
+  if df = nil then
+    ArgumentNullError(ER_ARG_NULL, 'df');
+
+  current := df;
+
+  // --- schema
+  ValidateSchema(current);
+
+  // --- DataFrame steps
+  for var i := 0 to fDataSteps.Count - 1 do
+  begin
+    fDataSteps[i] := fDataSteps[i].Fit(current);
+    current := fDataSteps[i].Transform(current);
+  end;
+
+  fFinalFeatures := ResolveFinalFeatures(current);
 
   Result := current.ToMatrix(fFinalFeatures);
+end;
+
+function PipelineBase.TransformDataFrame(df: DataFrame): DataFrame;
+begin
+  if df = nil then
+    ArgumentNullError(ER_ARG_NULL, 'df');
+  if not fFitted then
+    NotFittedError(ER_FIT_NOT_CALLED);
+
+  var current := df;
+  foreach var s in fDataSteps do
+    current := s.Transform(current);
+
+  Result := current;
 end;
 
 function PipelineBase.FitTransformMatrix(var X: Matrix; y: Vector): Matrix;
@@ -416,12 +469,9 @@ end;
 
 constructor DataPipeline.Create;
 begin
-  fDataSteps := new List<IPreprocessor>;
-  fMatrixSteps := new List<ITransformer>;
+  inherited Create;
   fModel := nil;
   fTarget := '';
-  fFeatures := nil;
-  fFitted := false;
 end;
 
 function DataPipeline.Add(step: IPipelineStep): DataPipeline;
@@ -493,24 +543,11 @@ begin
   if (target = nil) or (target = '') then
     ArgumentError(ER_TARGET_EMPTY);
 
-  if (features = nil) or (features.Length = 0) then
-    ArgumentError(ER_FEATURES_EMPTY);
-  
-  var seen := new HashSet<string>;
+  ValidateFeatureList(features);
 
   foreach var f in features do
-  begin
-    if (f = nil) or (f = '') then
-      ArgumentError(ER_FEATURE_EMPTY);
-
     if f = target then
       ArgumentError(ER_DATAPIPE_TARGET_IN_FEATURES, target);
-
-    if seen.Contains(f) then
-      ArgumentError(ER_DATAPIPE_DUPLICATE_FEATURE, f);
-
-    seen.Add(f);
-  end;
 
   if (steps = nil) or (Length(steps) = 0) then
     ArgumentError(ER_PIPELINE_NO_STEPS);
@@ -604,38 +641,7 @@ begin
   Result := Self;
 end;
 
-function DataPipeline.Transform(df: DataFrame): DataFrame;
-begin
-  if df = nil then
-    ArgumentNullError(ER_ARG_NULL, 'df');
-  if not fFitted then
-    NotFittedError(ER_FIT_NOT_CALLED);
-
-  var current := df;
-  foreach var s in fDataSteps do
-    current := s.Transform(current);
-
-  Result := current;
-end;
-
-function DataPipeline.FitTransform(df: DataFrame): DataFrame;
-begin
-  if df = nil then
-    ArgumentNullError(ER_ARG_NULL, 'df');
-  if fModel <> nil then
-    ArgumentError(ER_FITTRANSFORM_WITH_MODEL);
-
-  var current := df;
-
-  for var i := 0 to fDataSteps.Count - 1 do
-  begin
-    fDataSteps[i] := fDataSteps[i].Fit(current);
-    current := fDataSteps[i].Transform(current);
-  end;
-
-  fFitted := true;
-  Result := current;
-end;
+function DataPipeline.Transform(df: DataFrame): DataFrame := TransformDataFrame(df);
 
 function DataPipeline.Predict(df: DataFrame): Vector;
 begin
@@ -699,8 +705,7 @@ begin
   if fTarget = '' then
     ArgumentError(ER_TARGET_EMPTY);
 
-  if (fFeatures = nil) or (Length(fFeatures) = 0) then
-    ArgumentError(ER_FEATURES_EMPTY);
+  ValidateFeatureList(fFeatures);
 
   // target не должен входить в features
   for var i := 0 to High(fFeatures) do
@@ -714,29 +719,28 @@ begin
     ArgumentError(ER_DATAPIPE_TARGET_NOT_FOUND, fTarget, cols);
   end;
   
-  if fTask = tkClassification then
-    if not df.IsCategorical(fTarget) then
-      ArgumentError(ER_ENCODELABELS_NOT_CATEGORICAL, fTarget);
-  
-  var seen := new HashSet<string>;
+  case fTask of
+    tkClassification:
+      if not df.IsCategorical(fTarget) then
+        ArgumentError(ER_ENCODELABELS_NOT_CATEGORICAL, fTarget);
 
+    tkRegression:
+      begin
+        var ct := df.GetColumnType(fTarget);
+        if not (ct in [ColumnType.ctInt, ColumnType.ctFloat]) then
+          ArgumentError(ER_REGRESSION_TARGET_MUST_BE_NUMERIC, fTarget);
+      end;
+  end;
+  
   for var i := 0 to High(fFeatures) do
   begin
     var f := fFeatures[i];
-
-    if f = '' then
-      ArgumentError(ER_FEATURE_EMPTY);
 
     if not df.Schema.HasColumn(f) then
     begin
       var cols := df.Schema.ColumnNames.JoinToString(', ');
       ArgumentError(ER_DATAPIPE_FEATURE_NOT_FOUND, f, cols);
     end;
-
-    if seen.Contains(f) then
-      ArgumentError(ER_DATAPIPE_DUPLICATE_FEATURE, f);
-
-    seen.Add(f);
   end;
 end;
 
@@ -804,11 +808,8 @@ end;
 
 constructor UDataPipeline.Create;
 begin
-  fDataSteps := new List<IPreprocessor>;
-  fMatrixSteps := new List<ITransformer>;
+  inherited Create;
   fModel := nil;
-  fFeatures := nil;
-  fFitted := false;
 end;
 
 function UDataPipeline.Add(step: IPipelineStep): UDataPipeline;
@@ -856,21 +857,7 @@ end;
 class function UDataPipeline.Build(features: array of string;
   params steps: array of IPipelineStep): UDataPipeline;
 begin
-  if (features = nil) or (features.Length = 0) then
-    ArgumentError(ER_FEATURES_EMPTY);
-
-  var seen := new HashSet<string>;
-
-  foreach var f in features do
-  begin
-    if (f = nil) or (f = '') then
-      ArgumentError(ER_FEATURE_EMPTY);
-
-    if seen.Contains(f) then
-      ArgumentError(ER_DATAPIPE_DUPLICATE_FEATURE, f);
-
-    seen.Add(f);
-  end;
+  ValidateFeatureList(features);
 
   if (steps = nil) or (Length(steps) = 0) then
     ArgumentError(ER_PIPELINE_NO_STEPS);
@@ -921,38 +908,7 @@ begin
   Result := Self;
 end;
 
-function UDataPipeline.Transform(df: DataFrame): DataFrame;
-begin
-  if df = nil then
-    ArgumentNullError(ER_ARG_NULL, 'df');
-  if not fFitted then
-    NotFittedError(ER_FIT_NOT_CALLED);
-
-  var current := df;
-  foreach var s in fDataSteps do
-    current := s.Transform(current);
-
-  Result := current;
-end;
-
-function UDataPipeline.FitTransform(df: DataFrame): DataFrame;
-begin
-  if df = nil then
-    ArgumentNullError(ER_ARG_NULL, 'df');
-  if fModel <> nil then
-    ArgumentError(ER_FITTRANSFORM_WITH_MODEL);
-
-  var current := df;
-
-  for var i := 0 to fDataSteps.Count - 1 do
-  begin
-    fDataSteps[i] := fDataSteps[i].Fit(current);
-    current := fDataSteps[i].Transform(current);
-  end;
-
-  fFitted := true;
-  Result := current;
-end;
+function UDataPipeline.Transform(df: DataFrame): DataFrame := TransformDataFrame(df);
 
 function UDataPipeline.FitPredict(df: DataFrame): array of integer;
 begin
@@ -978,27 +934,7 @@ begin
   end;
 
   // --- 2) вычислить финальные признаки
-  var feats := new List<string>;
-
-  foreach var f in fFeatures do
-  begin
-    if current.HasColumn(f) then
-    begin
-      feats.Add(f);
-      continue;
-    end;
-
-    // искать производные признаки (например, OneHotEncoder)
-    foreach var c in current.Schema.ColumnNames do
-      if c.StartsWith(f + '_') then
-        if not feats.Contains(c) then
-          feats.Add(c);
-  end;
-
-  if feats.Count = 0 then
-    ArgumentError(ER_PIPELINE_NO_FEATURES);
-
-  fFinalFeatures := feats.ToArray;
+  fFinalFeatures := ResolveFinalFeatures(current);
 
   var X := current.ToMatrix(fFinalFeatures);
 
@@ -1100,28 +1036,17 @@ end;
 
 procedure UDataPipeline.ValidateSchema(df: DataFrame);
 begin
-  if (fFeatures = nil) or (Length(fFeatures) = 0) then
-    ArgumentError(ER_FEATURES_EMPTY);
-
-  var seen := new HashSet<string>;
+  ValidateFeatureList(fFeatures);
 
   for var i := 0 to High(fFeatures) do
   begin
     var f := fFeatures[i];
-
-    if f = '' then
-      ArgumentError(ER_FEATURE_EMPTY);
 
     if not df.Schema.HasColumn(f) then
     begin
       var cols := df.Schema.ColumnNames.JoinToString(', ');
       ArgumentError(ER_DATAPIPE_FEATURE_NOT_FOUND, f, cols);
     end;
-
-    if seen.Contains(f) then
-      ArgumentError(ER_DATAPIPE_DUPLICATE_FEATURE, f);
-
-    seen.Add(f);
   end;
 end;
 
