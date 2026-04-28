@@ -6,10 +6,12 @@ const
   ER_DIM_MISMATCH =
     'Размерности не совпадают: {0} и {1}!!Dimension mismatch: {0} and {1}';  
   ER_TO_VECTOR_NON_NUMERIC =
-    'ToVector: столбец "{0}" содержит нечисловые или NA значения!!' +
-    'ToVector: column "{0}" contains non-numeric or NA values';
+      'ToVector: столбец "{0}" содержит нечисловые или NA значения!!' +
+      'ToVector: column "{0}" contains non-numeric or NA values';
+  ER_LABELS_NOT_INTEGER =
+      'Метки классов должны быть целыми числами!!Class labels must be integers';
   ER_PARAM_VALUES_EMPTY =
-    'Список paramValues пуст!!paramValues is empty';
+      'Список paramValues пуст!!paramValues is empty';
   ER_EMPTY_DATASET =
     'Набор данных пуст!!Dataset is empty';
   ER_LAMBDA_NEGATIVE =

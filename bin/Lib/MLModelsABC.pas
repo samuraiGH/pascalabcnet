@@ -248,6 +248,8 @@ type
       fMaxIter: integer;
       fTol: real;
       
+      function GetCoefficients: Vector;
+      function GetIntercept: real;
       function GetIsFitted: boolean;
     public
       /// Создаёт модель Lasso-регрессии.
@@ -277,6 +279,17 @@ type
 /// Копирует только конфигурацию модели (без обученного состояния).
 /// Используется для создания независимых экземпляров модели.
       function Clone: IModel;
+      
+      /// Вектор коэффициентов модели.
+      /// Длина равна числу признаков.
+      /// Доступен после обучения (Fit).
+      property Coefficients: Vector read GetCoefficients;
+    
+      /// Свободный член модели (смещение, bias).
+      property Intercept: real read GetIntercept;
+    
+      /// Коэффициент L1-регуляризации.
+      property Alpha: real read fAlpha;
       
       /// Показывает, была ли модель обучена.
       /// После вызова Fit значение становится True.
@@ -2176,6 +2189,7 @@ type
   MLConfig = static class
   public
     /// Проверять ли входные данные моделей на NaN, Inf
+    /// Изменение этого флага влияет на все модели и все параллельные вычисления.
     static ValidateFiniteInputs: boolean := True;
   end;
 
@@ -2216,8 +2230,6 @@ const
     'Параметр learningRate должен быть > 0!!learningRate must be > 0';
   ER_SUBSAMPLE_OUT_OF_RANGE =
     'Параметр subsample должен быть в диапазоне (0, 1]!!subsample must be in (0, 1]'; 
-  ER_LABELS_NOT_INTEGER =
-    'Метки классов должны быть целыми!!Class labels must be integers'; 
   ER_N_ESTIMATORS_INVALID =
     'nEstimators должен быть > 0!!nEstimators must be > 0';
   ER_LEARNING_RATE_INVALID =
@@ -2478,6 +2490,9 @@ function LinearRegression.Predict(X: Matrix): Vector;
 begin
   if not ffitted then
     NotFittedError(ER_FIT_NOT_CALLED);
+  
+  if X = nil then
+    ArgumentNullError(ER_X_NULL);
   
   if MLConfig.ValidateFiniteInputs then
     CheckXForPredict(X);
@@ -2846,6 +2861,16 @@ end;
 function LassoRegression.Clone: IModel;
 begin
   Result := new LassoRegression(fAlpha, fMaxIter, fTol);
+end;
+
+function LassoRegression.GetCoefficients: Vector;
+begin
+  Result := fModel.Coefficients;
+end;
+
+function LassoRegression.GetIntercept: real;
+begin
+  Result := fModel.Intercept;
 end;
 
 function LassoRegression.GetIsFitted: boolean;
@@ -8592,14 +8617,16 @@ begin
   var p := X.ColCount;
 
   Result := new Matrix(n, p);
+  
+  var scale := fRangeMax - fRangeMin;
 
   for var i := 0 to n - 1 do
     for var j := 0 to p - 1 do
     begin
       var range := fMax[j] - fMin[j];
 
-      if range <> 0 then
-        Result[i,j] := X[i,j] * range + fMin[j]
+      if (scale > 1e-12) and (range > 1e-12) then
+        Result[i,j] := (X[i,j] - fRangeMin) / scale * range + fMin[j]
       else
         Result[i,j] := fMin[j];
     end;
@@ -8643,19 +8670,11 @@ begin
     ArgumentOutOfRangeError(ER_K_EXCEEDS_FEATURES, fK);
 
   fFeatureCount := X.ColCount;
-
-  // --- центрирование
+  
   fMean := X.ColumnMeans;
 
-  var Xc := X.Clone;
-
-  for var j := 0 to X.ColCount - 1 do
-    for var i := 0 to X.RowCount - 1 do
-      Xc[i,j] -= fMean[j];
-
-  // --- PCA
-  var (W, variances) := Xc.PCA(fK);
-
+  var (W, variances) := X.PCA(fK);
+  
   fComponents := W;
 
   fFitted := true;

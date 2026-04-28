@@ -303,6 +303,8 @@ const
     'Вектор пуст!!Vector is empty';
   ER_VECTOR_DIVIDE_BY_ZERO =
     'Деление на ноль при делении вектора на скаляр!!Division by zero in Vector / scalar';
+  ER_VECTOR_TO_INT_NON_INTEGER =
+    'Вектор содержит нецелое значение на позиции {0}: {1}!!Vector contains non-integer value at index {0}: {1}';
   ER_MATRIX_SIZE_NEGATIVE =
     'Размеры матрицы должны быть неотрицательными!!Matrix size must be non-negative';
   ER_MATRIX_SIZE_MISMATCH =
@@ -383,7 +385,15 @@ begin
   Result := new integer[Length];
   
   for var i := 0 to Length - 1 do
-    Result[i] := integer(Data[i]);
+  begin
+    var x := Data[i];
+    var ix := Round(x);
+    
+    if PABCSystem.Abs(x - ix) > 1e-12 then
+      ArgumentError(ER_VECTOR_TO_INT_NON_INTEGER, i, x);
+    
+    Result[i] := ix;
+  end;
 end;
 
 function Vector.Clone: Vector;

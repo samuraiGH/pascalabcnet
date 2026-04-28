@@ -3209,6 +3209,15 @@ type
 /// Функция для перевода сообщений об ошибках
 function GetTranslation(message: string): string;
 
+function FormatSafe(msg: string; args: array of object): string;
+
+/// Вызывает System.ArgumentException с локализованным форматированным сообщением msg
+procedure RaiseArgumentException(msg: string; params args: array of object);
+/// Вызывает System.ArgumentNullException с локализованным форматированным сообщением msg, используя paramName как аргумент шаблона
+procedure RaiseArgumentNullException(msg: string; paramName: string);
+/// Вызывает System.ArgumentOutOfRangeException с локализованным форматированным сообщением msg, используя paramName как аргумент шаблона
+procedure RaiseArgumentOutOfRangeException(msg: string; paramName: string);
+
 const __PascalABCDir = 'меняется на этапе компиляции';
 
 /// Возвращает каталог запуска PascalABC.NET
@@ -3281,7 +3290,8 @@ const
   SEQUENCE_CANNOT_BE_EMPTY = 'Последовательность не может быть пустой!!Sequence cannot be empty';
   ARRAY_CANNOT_BE_EMPTY = 'Массив не может быть пустым!!Array cannot be empty';
   MIN_CANNOT_BE_GREATER_THAN_MAX = 'Clamp: min не может быть больше чем max!!Clamp: min cannot be greater than max';
-  SUBSTRING_CANNOT_BE_EMPTY = 'Подстрока не может быть пустой!!Substring cannot be empty';
+  PARAMETER_MUST_BE_GREATER_THAN0_0 = 'Параметр {0} должен быть > 0!!Parameter {0} must be > 0';
+  SUBSTRING_CANNOT_BE_EMPTY_0 = 'Подстрока {0} не может быть пустой!!Substring {0} cannot be empty';
 // -----------------------------------------------------
 //                  WINAPI
 // -----------------------------------------------------
@@ -3316,6 +3326,31 @@ begin
     Result := arr[1]
   else
     Result := arr[0]
+end;
+
+function FormatSafe(msg: string; args: array of object): string;
+begin
+  var text := GetTranslation(msg);
+  try
+    Result := Format(text, args);
+  except
+    Result := text;
+  end;
+end;
+
+procedure RaiseArgumentException(msg: string; params args: array of object);
+begin
+  raise new System.ArgumentException(FormatSafe(msg, args));
+end;
+
+procedure RaiseArgumentNullException(msg: string; paramName: string);
+begin
+  raise new System.ArgumentNullException(FormatSafe(msg, Arr&<object>(paramName)));
+end;
+
+procedure RaiseArgumentOutOfRangeException(msg: string; paramName: string);
+begin
+  raise new System.ArgumentOutOfRangeException(FormatSafe(msg, Arr&<object>(paramName)));
 end;
 
 function ReadPascalABCRegistry(rootName: string): string;
@@ -3441,7 +3476,7 @@ procedure AssignSetWithBounds(var left: TypedSet; right: TypedSet; low, high: ob
 begin
   left := right.CloneSet();
   left.low_bound := low;
-  right.upper_bound := high;
+  left.upper_bound := high;
 end;
 
 procedure TypedSetInit(var st: TypedSet);
@@ -5556,10 +5591,8 @@ end;
 
 function PartitionPoints(a, b: real; n: integer): sequence of real;
 begin
-  if n = 0 then
-    raise new System.ArgumentException('Range: n = 0');
-  if n < 0 then
-    raise new System.ArgumentException('Range: n < 0');
+  if n <= 0 then
+    RaiseArgumentException(PARAMETER_MUST_BE_GREATER_THAN0_0, 'n');
   var r := a;
   var h := (b - a) / n;
   for var i := 0 to n do
@@ -5585,53 +5618,37 @@ end;
 function Range(a, b, step: BigInteger): sequence of BigInteger;
 begin
   if step = 0 then
-    raise new System.ArgumentException('step = 0');
-  if step > 0 then
-    while a<=b do
-    begin
-      yield a;
-      a += step;
-    end
-  else  
-    while a>=b do
-    begin
-      yield a;
-      a += step;
-    end
+    RaiseArgumentException(PARAMETER_STEP_MUST_BE_NOT_EQUAL_0);
+
+  var x := a;
+
+  while (step > 0) and (x <= b) or (step < 0) and (x >= b) do
+  begin
+    yield x;
+    x += step;
+  end;
 end;
 
 function Range(a, b: BigInteger): sequence of BigInteger := Range(a,b,1);
 
-type
-  ArithmSeq = auto class
-    a, step: integer;
-    function f(x: integer): integer;
-    begin
-      Result := x * step + a;
-    end;
-  end;
-
 function Range(a, b, step: integer): sequence of integer;
 begin
   if step = 0 then
-    raise new System.ArgumentException('step = 0');
-  if (step > 0) and (b < a) or (step < 0) and (b > a) then
+    RaiseArgumentException(PARAMETER_STEP_MUST_BE_NOT_EQUAL_0);
+
+  var x := a;
+
+  while (step > 0) and (x <= b) or (step < 0) and (x >= b) do
   begin
-    Result := System.Linq.Enumerable.Empty&<integer>;
-    exit;
+    yield x;
+    x += step;
   end;
-  var n := abs((b - a) div step) + 1;
-  var ar: ArithmSeq;
-  {if step<0 then
-    ar := new ArithmSeq(b,step)
-  else} ar := new ArithmSeq(a, step);
-  Result := System.Linq.Enumerable.Range(0, n).Select(ar.f);
 end;
 
 function Range(a, b, step: real): sequence of real;
 begin
   if step = 0 then
-    raise new System.ArgumentException('step = 0');
+    RaiseArgumentException(PARAMETER_STEP_MUST_BE_NOT_EQUAL_0);
   if (step > 0) and (b < a) or (step < 0) and (b > a) then
     exit;
   if a = b then 
@@ -9064,11 +9081,9 @@ end;
 
 function DeleteFile(fileName: string): boolean;
 begin
-  if not &File.Exists(fileName) then
-  begin
-    Result := False;
-    exit
-  end;
+  if not FileExists(fileName) then
+    exit(False);
+  
   try
     Result := True;
     &File.Delete(fileName);
@@ -9137,18 +9152,12 @@ procedure Assert(cond: boolean; sourceFile: string; line: integer);
 begin
   if (Environment.OSVersion.Platform = PlatformID.Unix) or (Environment.OSVersion.Platform = PlatformID.MacOSX) or IsWDE then
   begin
-    //var stackTrace := new System.Diagnostics.StackTrace(true);
-    //var ind := 1;
-    //if stackTrace.GetFrame(0).GetMethod().Name <> 'Assert' then
-      //ind := 0;
-    //var currentLine := stackTrace.GetFrame(ind).GetFileLineNumber();
-    //var currentFile := stackTrace.GetFrame(ind).GetFileName();
     if not IsWDE then
       System.Diagnostics.Debug.Assert(cond, 'Файл ' + sourceFile + ', строка ' + line.ToString())
     else if not cond then
     begin
       var err := 'Сбой подтверждения: ' + Environment.NewLine + 'Файл ' + sourceFile + ', строка ' + line.ToString();
-      writeln(err);
+      Writeln(err);
       System.Threading.Thread.Sleep(500);
       raise new Exception();
     end;
@@ -9163,12 +9172,6 @@ procedure Assert(cond: boolean; message: string; sourceFile: string; line: integ
 begin
   if (Environment.OSVersion.Platform = PlatformID.Unix) or (Environment.OSVersion.Platform = PlatformID.MacOSX) or IsWDE then
   begin
-    //var stackTrace := new System.Diagnostics.StackTrace(true);
-    //var ind := 1;
-    //if stackTrace.GetFrame(0).GetMethod().Name <> 'Assert' then
-    //  ind := 0;
-    //var currentLine := stackTrace.GetFrame(ind).GetFileLineNumber();
-    //var currentFile := stackTrace.GetFrame(ind).GetFileName();
     if not IsWDE then
       System.Diagnostics.Debug.Assert(cond, 'Файл ' + sourceFile + ', строка ' + line.ToString() + ': ' + message)
     else if not cond then
@@ -9234,20 +9237,41 @@ begin
   Result := DiskSize(ConvertDiskToDiskName(disk));
 end;
 
-var
+{var
   curr_time := DateTime.Now;
 
 function Milliseconds: integer;
 begin
   curr_time := DateTime.Now;
-  Milliseconds := Convert.ToInt32((curr_time - StartTime).TotalMilliseconds);
+  Milliseconds := Round((curr_time - StartTime).TotalMilliseconds);
 end;
 
 function MillisecondsDelta: integer;
 begin
   var t := DateTime.Now;  
-  Result := Convert.ToInt32((t - curr_time).TotalMilliseconds);
-  curr_time := DateTime.Now;
+  Result := Round((t - curr_time).TotalMilliseconds);
+  curr_time := t;
+end;}
+
+var startTimestamp := Stopwatch.GetTimestamp;
+var lastTimestamp  := startTimestamp;
+var sync := new object;
+
+function Milliseconds: integer;
+begin
+  var now := Stopwatch.GetTimestamp;
+  Result := integer((now - startTimestamp) * 1000 div Stopwatch.Frequency);
+end;
+
+function MillisecondsDelta: integer;
+begin
+  lock sync do
+  begin
+    var now := Stopwatch.GetTimestamp;
+    var delta := (now - lastTimestamp) * 1000 div Stopwatch.Frequency;
+    lastTimestamp := now;
+    Result := integer(delta);
+  end;
 end;
 
 procedure Halt;
@@ -9666,23 +9690,22 @@ end;
 function RandomReal(a, b: real; digits: integer): real;
 begin
   if digits<0 then
-    Result := Random(a,b)
-  else begin
-    // Бывают некорректные данные. Например, найти точку с 2 знаками на [2.736, 2.737]. Тогда возвращать a скажем
-    var step := 1/10**digits;
-    Result := Round(Random(a,b),digits);
+    exit(Random(a,b));
+  
+  // Бывают некорректные данные. Например, найти точку с 2 знаками на [2.736, 2.737]. Тогда возвращать a скажем
+  var step := 1/10**digits;
+  Result := Round(Random(a,b),digits);
+  if Result < a then
+  begin  
+    Result += step;
+    if Result > b then
+      Result := b
+  end  
+  else if Result > b then 
+  begin  
+    Result -= step;
     if Result < a then
-    begin  
-      Result += step;
-      if Result > b then
-        Result := b
-    end  
-    else if Result > b then 
-    begin  
-      Result -= step;
-      if Result < a then
-        Result := a;
-    end;  
+      Result := a;
   end;  
 end;
 
@@ -10430,7 +10453,7 @@ end;
 
 function Trim(s: string): string;
 begin
-  Result := s.Trim(|' '|);
+  Result := s.Trim(' ');
 end;
 
 function TrimLeft(s: string): string;
@@ -15185,6 +15208,9 @@ end;
 function IndicesOf(Self, SubS: string; overlay: boolean := False): sequence of integer; extensionmethod;
 // Реализует КМП-алгоритм.
 begin
+  if string.IsNullOrEmpty(SubS) then
+    RaiseArgumentException(SUBSTRING_CANNOT_BE_EMPTY_0, 'SubS');
+  
   var L := new List<integer>;
   var (n, m) := (Self.Length, SubS.Length);
   var border := PrefixFunction(SubS);
@@ -15216,7 +15242,7 @@ end;
 function CountOf(Self: string; substring: string; allowOverlap: boolean := false): integer; extensionmethod;
 begin
   if string.IsNullOrEmpty(substring) then
-    raise new System.ArgumentException(GetTranslation(SUBSTRING_CANNOT_BE_EMPTY));
+    RaiseArgumentException(SUBSTRING_CANNOT_BE_EMPTY_0, 'substring');
   
   Result := 0;
   var i := 1;

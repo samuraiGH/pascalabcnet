@@ -135,7 +135,8 @@ const
     'Для {0} требуется как минимум 2 объекта!!' +
     'At least 2 samples are required for {0}';
   ER_STRATIFIED_CLASS_TOO_SMALL =
-    'Класс {0} содержит {1} объектов, что меньше числа фолдов ({2})!!Class {0} has {1} samples, which is less than the number of folds ({2})';    
+    'Класс {0} содержит {1} объектов, что меньше числа фолдов ({2}). Уменьшите k или объедините малочисленные классы.!!' +
+    'Class {0} has {1} samples, which is less than the number of folds ({2}). Reduce k or merge very small classes.';
   ER_STRATIFIED_K_TOO_LARGE =
     'Stratified CV: число фолдов ({0}) превышает минимальный размер класса ({1})!!Stratified CV: number of folds ({0}) exceeds smallest class size ({1})';    
 

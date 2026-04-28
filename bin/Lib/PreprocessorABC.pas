@@ -44,6 +44,8 @@ type
 /// Кодирует строковый категориальный столбец в целочисленные индексы (0,1,2,...).
 /// Соответствие значений и индексов фиксируется при вызове Fit
 /// в порядке первого появления категорий.
+/// Пропущенные значения (NA) игнорируются при обучении
+/// и сохраняются как пропуски при преобразовании.
 /// Работает только со строковыми столбцами и предназначен для признаков.
 /// Не должен применяться к целевому столбцу (target).
   LabelEncoder = class(IPreprocessor, IColumnBoundStep)
@@ -170,32 +172,11 @@ implementation
 uses MLExceptions;
 
 const
-  ER_SCALER_NO_COLUMNS =
-    'StandardScaler: столбцы не указаны!!StandardScaler: columns not specified';
-  ER_SCALER_COLUMN_NOT_NUMERIC =
-    'StandardScaler: столбец "{0}" не является числовым!!StandardScaler: column "{0}" is not numeric';  
-  ER_SCALER_NO_VALID_VALUES =
-    'StandardScaler: столбец "{0}" не содержит допустимых значений!!' +
-    'StandardScaler: column "{0}" has no valid values';
-  ER_SCALER_ZERO_VARIANCE =
-    'StandardScaler: нулевая дисперсия в столбце "{0}"!!' +
-    'StandardScaler: zero variance in column "{0}"';
-  ER_MINMAX_NO_COLUMNS =
-    'MinMaxScaler: столбцы не указаны!!MinMaxScaler: columns not specified';
-  ER_MINMAX_COLUMN_NOT_NUMERIC =
-    'MinMaxScaler: столбец "{0}" не является числовым!!MinMaxScaler: column "{0}" is not numeric';
-  ER_MINMAX_NO_VALID_VALUES =
-    'MinMaxScaler: столбец "{0}" не содержит допустимых значений!!' +
-    'MinMaxScaler: column "{0}" has no valid values';
-  ER_MINMAX_CONSTANT_COLUMN =
-    'MinMaxScaler: постоянный столбец "{0}"!!MinMaxScaler: constant column "{0}"';
   ER_LABELENCODER_NO_COLUMN =
     'LabelEncoder: столбец не указан!!LabelEncoder: column not specified';
   ER_LABELENCODER_NOT_STRING =
     'LabelEncoder: столбец "{0}" не является строковым!!' +
     'LabelEncoder: column "{0}" is not string';
-  ER_LABELENCODER_NA =
-    'LabelEncoder: NA значение не допускается!!LabelEncoder: NA value not allowed';
   ER_LABELENCODER_UNSEEN_CATEGORY =
     'LabelEncoder: неизвестная категория "{0}"!!' +
     'LabelEncoder: unseen category "{0}"';

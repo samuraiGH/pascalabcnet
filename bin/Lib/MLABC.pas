@@ -89,7 +89,7 @@ type
   NormType = MLModelsABC.NormType;
   
   Activations = MLModelsABC.Activations;
-  Pipeline = MLModelsABC.MatrixPipeline;
+  MatrixPipeline = MLModelsABC.MatrixPipeline;
   
   LinearRegression = MLModelsABC.LinearRegression;
   LogisticRegression = MLModelsABC.LogisticRegression;

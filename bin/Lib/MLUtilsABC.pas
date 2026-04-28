@@ -100,8 +100,6 @@ const
     '{0} не может быть nil!!{0} cannot be nil';
   ER_LABELS_ARRAY_NULL =
     'labels не может быть nil!!labels cannot be nil';
-  ER_LABELS_NOT_INTEGER =
-    'Метки классов должны быть целыми числами!!Class labels must be integers';
   ER_UNKNOWN_CLASS_IN_TRANSFORM =
     'Неизвестное значение класса "{0}" при преобразовании меток!!Unknown class value "{0}" in TransformLabels';
   ER_LABEL_INDEX_OUT_OF_RANGE =
