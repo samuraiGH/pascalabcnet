@@ -4,7 +4,7 @@ begin
   var df := CsvLoader.Load('towns_russia.csv', inferCategorical := true);  
   df := df.Select(['population', 'lat', 'lon', 'region_name', 'federal_district']);
   
-  var imputer := new Imputer('population', 'lat', 'lon');
+  var imputer := new Imputer(['population', 'lat', 'lon']);
   df := imputer.FitTransform(df);
   
   var le1 := new LabelEncoder('region_name');

@@ -58,6 +58,7 @@ type
   Matrix = LinearAlgebraML.Matrix;
   
   Validation = ValidationML.Validation;
+  GridSearch = ValidationML.GridSearch;
   
   Metrics = MetricsABC.Metrics;
   ClassificationMetrics = MetricsABC.ClassificationMetrics;
@@ -69,6 +70,7 @@ type
   
   DataFrame = DataFrameABC.DataFrame;
   DataFrameCursor = DataFrameABCCore.DataFrameCursor;
+  ColumnType = DataFrameABCCore.ColumnType;
   
   Statistics = DataFrameABC.Statistics;
   CsvLoader = DataFrameABC.CsvLoader;
@@ -130,7 +132,7 @@ type
   ISupervisedModel = MLCoreABC.ISupervisedModel;
   IUnsupervisedModel = MLCoreABC.IUnsupervisedModel;
   
-  UPipeline = MLModelsABC.UMatrixPipeline;
+  UMatrixPipeline = MLModelsABC.UMatrixPipeline;
   UDataPipeline = MLPipelineABC.UDataPipeline;
   TaskKind = MLPipelineABC.TaskKind;
   

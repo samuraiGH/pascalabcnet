@@ -20,6 +20,7 @@ uses System,
      System.Windows.Shapes,
      System.Threading,
      System.Windows.Threading,
+     System.Text,
      InteractiveDataDisplay.WPF,
      LinearAlgebraML;
      
@@ -110,6 +111,7 @@ type
     procedure Surface(x1, x2: array of real; nx, ny: integer; f: Matrix -> array of integer; pal: PlotML.Palette := nil);      
       
     procedure Heatmap(m: Matrix);
+    procedure HeatCell(value, minValue, maxValue: real; text: string := nil);
     
     procedure Text(s: string; x: real := 0.5; y: real := 0.5);
     
@@ -151,10 +153,13 @@ type
     static procedure DrawPoints(chart: ChartWPF; x, y: array of real;
       color: ColorWPF; size: real; marker: MarkerType; legend: string);
       
-    static procedure DrawHeatmap(chart: ChartWPF; m: array[,] of real);  
+    static procedure DrawHeatmap(chart: ChartWPF; m: array[,] of real; names: array of string := nil);  
     
     static procedure DrawHist(chart: ChartWPF; x: array of real;
       bins: integer; color: ColorWPF; alpha: real; legend: string);
+      
+    static procedure DrawHistMany(chart: ChartWPF; arrays: array of array of real;
+      bins: integer; colors: array of ColorWPF; alpha: real; legends: array of string);
       
     static procedure DrawSurface(chart: ChartWPF; labels: array of integer; 
       nx, ny: integer; xmin, xmax, ymin, ymax: real; pal: Palette);
@@ -177,9 +182,13 @@ type
     static procedure Hist(x: array of real; bins: integer := 0;
       color: ColorWPF := DefaultColor; alpha: real := 0.7; legend: string := nil);
 
+    static procedure HistMany(arrays: array of array of real; bins: integer := 0;
+      colors: array of ColorWPF := nil; alpha: real := 0.7; legend: array of string := nil);
+      
     static procedure PairPlot(X: array[,] of real; labels: array of integer; names: array of string);
     
     static procedure Heatmap(m: array[,] of real);
+    static procedure Heatmap(m: array[,] of real; names: array of string);
     
     static procedure Surface(labels: array of integer; nx, ny: integer; xmin, xmax, ymin, ymax: real; pal: PlotML.Palette := nil);
 
@@ -208,6 +217,7 @@ type
       := PairPlot(X.Data, labels, names);
     
     static procedure Heatmap(m: Matrix) := Heatmap(m.Data);
+    static procedure Heatmap(m: Matrix; names: array of string) := Heatmap(m.Data, names);
     
     
     static function Grid(rows,cols: integer): Figure;
@@ -226,6 +236,8 @@ type
     static procedure Clear;
     
     static procedure Save(filename: string);
+
+    static function DebugVisualTree: string;
     
     static property Title: string write SetTitle;
   end;
@@ -238,6 +250,8 @@ type
     fBinsCount: integer;
     fDescription: string;
     fMaxCount: integer;
+    MinValue: real := real.NaN;
+    MaxValue: real := real.NaN;
    
   public
     constructor Create;
@@ -249,6 +263,24 @@ type
     property BinsCount: integer read fBinsCount write fBinsCount;
     property Description: string read fDescription write fDescription;
     property MaxCount: integer read fMaxCount;
+  end;
+
+  HeatmapPlot = class(PlotWPF)
+  private
+    fCells: List<Polygon> := new List<Polygon>;
+    fMinValue: real;
+    fMaxValue: real;
+
+    function LerpColor(c1, c2: ColorWPF; t: real): ColorWPF;
+    function Clamp01(x: real): real;
+    function ColorForValue(v: real): ColorWPF;
+  public
+    constructor Create;
+
+    procedure SetData(m: array[,] of real);
+
+    property MinValue: real read fMinValue;
+    property MaxValue: real read fMaxValue;
   end;
   
   SurfacePlot = class(PlotWPF)
@@ -375,6 +407,69 @@ begin
 
   rootPaletteIndex += 1;
   Result := c;
+end;
+
+function Clamp01(x: real): real;
+begin
+  if x < 0 then
+    Result := 0
+  else if x > 1 then
+    Result := 1
+  else
+    Result := x;
+end;
+
+function LerpColor(c1, c2: ColorWPF; t: real): ColorWPF;
+begin
+  t := Clamp01(t);
+
+  Result := Color.FromRgb(
+    byte(Round(c1.R + (c2.R - c1.R) * t)),
+    byte(Round(c1.G + (c2.G - c1.G) * t)),
+    byte(Round(c1.B + (c2.B - c1.B) * t))
+  );
+end;
+
+function HeatmapColor(v, minValue, maxValue: real): ColorWPF;
+begin
+  if real.IsNaN(v) or real.IsInfinity(v) then
+    exit(Color.FromRgb(180, 180, 180));
+
+  if minValue = maxValue then
+    exit(Color.FromRgb(255, 255, 255));
+
+  var blue := Color.FromRgb(49, 130, 189);
+  var white := Color.FromRgb(255, 255, 255);
+  var red := Color.FromRgb(222, 45, 38);
+
+  if (minValue < 0) and (maxValue > 0) then
+  begin
+    if v < 0 then
+      Result := LerpColor(white, blue, Abs(v / minValue))
+    else
+      Result := LerpColor(white, red, v / maxValue);
+    exit;
+  end;
+
+  Result := LerpColor(blue, red, (v - minValue) / (maxValue - minValue));
+end;
+
+procedure DumpVisualNode(sb: StringBuilder; obj: DependencyObject; level: integer);
+begin
+  if obj = nil then
+    exit;
+
+  var fe := obj as FrameworkElement;
+  var name := if (fe <> nil) and (fe.Name <> nil) and (fe.Name <> '') then fe.Name else '-';
+
+  sb.Append(''.PadLeft(level * 2));
+  sb.Append(obj.GetType.FullName);
+  sb.Append('  Name=');
+  sb.AppendLine(name);
+
+  var cnt := VisualTreeHelper.GetChildrenCount(obj);
+  for var i := 0 to cnt - 1 do
+    DumpVisualNode(sb, VisualTreeHelper.GetChild(obj, i), level + 1);
 end;
 
 function MakeHistogram(data: array of real; bins: integer): (array of real, array of real);
@@ -631,6 +726,35 @@ begin
   end);
 end;
 
+procedure Cell.HeatCell(value, minValue, maxValue: real; text: string);
+begin
+  Plot.RunUI(() ->
+  begin
+    EnsureChart;
+
+    var container := chart.Content as GridWPF;
+    if container = nil then
+    begin
+      container := new GridWPF;
+      chart.Content := container;
+    end;
+
+    container.Children.Clear;
+    container.Background := new SolidColorBrush(HeatmapColor(value, minValue, maxValue));
+
+    if text <> nil then
+    begin
+      var tb := new System.Windows.Controls.TextBlock;
+      tb.Text := text;
+      tb.FontSize := 14;
+      tb.FontWeight := System.Windows.FontWeights.Bold;
+      tb.HorizontalAlignment := System.Windows.HorizontalAlignment.Center;
+      tb.VerticalAlignment := System.Windows.VerticalAlignment.Center;
+      container.Children.Add(tb);
+    end;
+  end);
+end;
+
 procedure Cell.Hist(x: array of real; bins: integer; color: ColorWPF; alpha: real; legend: string);
 begin
   Plot.RunUI(() ->
@@ -811,6 +935,25 @@ begin
   end);
 end;
 
+static function Plot.DebugVisualTree: string;
+begin
+  var sb := new StringBuilder;
+
+  RunUI(() ->
+  begin
+    if win = nil then
+    begin
+      sb.AppendLine('win = nil');
+      exit;
+    end;
+
+    sb.AppendLine('Window content tree:');
+    DumpVisualNode(sb, win.Content as DependencyObject, 0);
+  end);
+
+  Result := sb.ToString;
+end;
+
 static function Plot.CreateLineSeries(x,y: array of real; c: Color): LineGraphWPF;
 begin
   var g := new LineGraphWPF;
@@ -870,7 +1013,13 @@ begin
   tb.HorizontalAlignment := System.Windows.HorizontalAlignment.Center;
   tb.VerticalAlignment := System.Windows.VerticalAlignment.Center;
 
-  var grid := chart.Parent as System.Windows.Controls.Grid;
+  var grid := chart.Content as GridWPF;
+  if grid = nil then
+  begin
+    grid := new GridWPF;
+    chart.Content := grid;
+  end;
+
   if grid <> nil then
   begin
     tb.HorizontalAlignment := System.Windows.HorizontalAlignment.Center;
@@ -893,19 +1042,85 @@ begin
   AddSeries(chart, g);
 end;
 
-static procedure Plot.DrawHeatmap(chart: ChartWPF; m: array[,] of real);
+static procedure Plot.DrawHeatmap(chart: ChartWPF; m: array[,] of real; names: array of string);
 begin
   var rows := m.GetLength(0);
   var cols := m.GetLength(1);
 
-  var x := ArrGen(cols, i -> i);
-  var y := ArrGen(rows, i -> i);
+  var container := new GridWPF;
+  chart.Content := container;
 
-  var g := new HeatmapGraph;
-  
-  g.Plot(m, x, y);
+  var topOffset := if names <> nil then 1 else 0;
+  var leftOffset := if names <> nil then 1 else 0;
 
-  AddSeries(chart, g);
+  for var i := 0 to rows + topOffset - 1 do
+    container.RowDefinitions.Add(new RowDefinition);
+
+  for var j := 0 to cols + leftOffset - 1 do
+    container.ColumnDefinitions.Add(new ColumnDefinition);
+
+  if names <> nil then
+  begin
+    for var j := 0 to cols - 1 do
+    begin
+      var tb := new System.Windows.Controls.TextBlock;
+      tb.Text := names[j];
+      tb.FontSize := 13;
+      tb.FontWeight := System.Windows.FontWeights.Normal;
+      tb.TextAlignment := TextAlignment.Center;
+      tb.TextWrapping := TextWrapping.Wrap;
+      tb.Margin := new Thickness(6);
+      tb.HorizontalAlignment := HorizontalAlignment.Center;
+      tb.VerticalAlignment := VerticalAlignment.Center;
+      GridWPF.SetRow(tb, 0);
+      GridWPF.SetColumn(tb, j + 1);
+      container.Children.Add(tb);
+    end;
+
+    for var i := 0 to rows - 1 do
+    begin
+      var tb := new System.Windows.Controls.TextBlock;
+      tb.Text := names[i];
+      tb.FontSize := 13;
+      tb.FontWeight := System.Windows.FontWeights.Normal;
+      tb.TextAlignment := TextAlignment.Center;
+      tb.TextWrapping := TextWrapping.Wrap;
+      tb.Margin := new Thickness(6);
+      tb.HorizontalAlignment := HorizontalAlignment.Center;
+      tb.VerticalAlignment := VerticalAlignment.Center;
+      GridWPF.SetRow(tb, i + 1);
+      GridWPF.SetColumn(tb, 0);
+      container.Children.Add(tb);
+    end;
+  end;
+
+  var valuesOnly := new HeatmapPlot;
+  valuesOnly.SetData(m);
+  var minValue := valuesOnly.MinValue;
+  var maxValue := valuesOnly.MaxValue;
+
+  for var i := 0 to rows - 1 do
+    for var j := 0 to cols - 1 do
+    begin
+      var border := new Border;
+      border.BorderBrush := Brushes.White;
+      border.BorderThickness := new Thickness(0.25);
+      border.Background := new SolidColorBrush(HeatmapColor(m[i, j], minValue, maxValue));
+
+      var tb := new System.Windows.Controls.TextBlock;
+      tb.Text := $'{m[i, j]:F2}';
+      tb.FontSize := 15;
+      tb.FontWeight := System.Windows.FontWeights.SemiBold;
+      tb.TextAlignment := TextAlignment.Center;
+      tb.HorizontalAlignment := HorizontalAlignment.Center;
+      tb.VerticalAlignment := VerticalAlignment.Center;
+
+      border.Child := tb;
+
+      GridWPF.SetRow(border, i + topOffset);
+      GridWPF.SetColumn(border, j + leftOffset);
+      container.Children.Add(border);
+    end;
 end;
 
 class procedure Plot.AddSeries(chart: ChartWPF; series: UIElement);
@@ -977,7 +1192,15 @@ static procedure Plot.Heatmap(m: array[,] of real);
 begin
   RunUI(() ->
   begin
-    DrawHeatmap(rootChart, m);
+    DrawHeatmap(rootChart, m, nil);
+  end);
+end;
+
+static procedure Plot.Heatmap(m: array[,] of real; names: array of string);
+begin
+  RunUI(() ->
+  begin
+    DrawHeatmap(rootChart, m, names);
   end);
 end;
 
@@ -1183,6 +1406,94 @@ begin
   chart.PlotHeight := hist.MaxCount * 1.1;
 end;
 
+static procedure Plot.HistMany(arrays: array of array of real; bins: integer;
+  colors: array of ColorWPF; alpha: real; legend: array of string);
+begin
+  RunUI(() ->
+  begin
+    Plot.DrawHistMany(rootChart, arrays, bins, colors, alpha, legend);
+  end);
+end;
+
+static procedure Plot.DrawHistMany(chart: ChartWPF; arrays: array of array of real;
+  bins: integer; colors: array of ColorWPF; alpha: real; legends: array of string);
+begin
+  EnsureAxes(chart);
+  
+  var hasLegend := (legends <> nil) and (legends.Length > 0);
+
+  if hasLegend then
+    chart.LegendVisibility := Visibility.Visible;
+
+  if (arrays = nil) or (arrays.Length = 0) then exit;
+
+  // --- общий диапазон ---
+  var globalMin := real.MaxValue;
+  var globalMax := real.MinValue;
+
+  foreach var arr in arrays do
+  begin
+    if (arr = nil) or (arr.Length = 0) then continue;
+    globalMin := Min(globalMin, arr.Min);
+    globalMax := Max(globalMax, arr.Max);
+  end;
+  
+  if globalMin = real.MaxValue then
+    exit;
+  
+  if globalMax <= globalMin then
+    exit;
+
+  if bins = 0 then
+  begin
+    var maxLen := 0;
+    
+    foreach var arr in arrays do
+      if (arr <> nil) and (arr.Length > maxLen) then
+        maxLen := arr.Length;
+    
+    if maxLen = 0 then
+      exit;
+    
+    bins := Round(Sqrt(maxLen));
+  end;
+
+  var maxCount := 0;
+
+  // --- рисуем ---
+  for var k := 0 to arrays.Length - 1 do
+  begin
+    var x := arrays[k];
+    if (x = nil) or (x.Length = 0) then continue;
+
+    var hist := new HistogramPlot;
+
+    hist.BinsCount := bins;
+    hist.Color := if (colors<>nil) and (k < colors.Length) then colors[k] else NextRootColor;
+    hist.Alpha := alpha;
+
+    // фиксируем диапазон
+    hist.MinValue := globalMin;
+    hist.MaxValue := globalMax;
+
+    hist.SetData(x);
+
+    if hist.MaxCount > maxCount then
+      maxCount := hist.MaxCount;
+
+    if hasLegend and (k < legends.Length) then
+      hist.Description := legends[k];   
+
+    AddSeries(chart, hist);
+  end;
+
+  // --- оси ---
+  chart.PlotOriginX := Floor(globalMin);
+  chart.PlotWidth   := Ceil(globalMax) - Floor(globalMin);
+  chart.PlotOriginY := 0;
+  chart.PlotHeight  := maxCount * 1.1;
+end;
+
 constructor HistogramPlot.Create;
 begin
   fBins := new List<Polygon>;
@@ -1200,8 +1511,8 @@ begin
   if x=nil then exit;
   if x.Length=0 then exit;
 
-  var xmin := Floor(x.Min);
-  var xmax := Ceil(x.Max);
+  var xmin := if not real.IsNaN(MinValue) then Floor(MinValue) else Floor(x.Min);
+  var xmax := if not real.IsNaN(MaxValue) then Ceil(MaxValue) else Ceil(x.Max);
 
   if xmax=xmin then exit;
 
@@ -1245,8 +1556,116 @@ begin
     fBins.Add(poly);
     Children.Add(poly);
   end;
-  
+
   fMaxCount := counts.Max;
+end;
+
+constructor HeatmapPlot.Create;
+begin
+  IsAutoFitEnabled := false;
+  fMinValue := 0;
+  fMaxValue := 0;
+end;
+
+function HeatmapPlot.Clamp01(x: real): real;
+begin
+  if x < 0 then
+    Result := 0
+  else if x > 1 then
+    Result := 1
+  else
+    Result := x;
+end;
+
+function HeatmapPlot.LerpColor(c1, c2: ColorWPF; t: real): ColorWPF;
+begin
+  t := Clamp01(t);
+
+  Result := Color.FromRgb(
+    byte(Round(c1.R + (c2.R - c1.R) * t)),
+    byte(Round(c1.G + (c2.G - c1.G) * t)),
+    byte(Round(c1.B + (c2.B - c1.B) * t))
+  );
+end;
+
+function HeatmapPlot.ColorForValue(v: real): ColorWPF;
+begin
+  Result := HeatmapColor(v, fMinValue, fMaxValue);
+end;
+
+procedure HeatmapPlot.SetData(m: array[,] of real);
+begin
+  Children.Clear;
+  fCells.Clear;
+
+  if m = nil then
+    exit;
+
+  var rows := m.GetLength(0);
+  var cols := m.GetLength(1);
+
+  if (rows = 0) or (cols = 0) then
+    exit;
+
+  var foundFinite := false;
+  fMinValue := 0;
+  fMaxValue := 0;
+
+  for var i := 0 to rows - 1 do
+    for var j := 0 to cols - 1 do
+    begin
+      var v := m[i, j];
+      if real.IsNaN(v) or real.IsInfinity(v) then
+        continue;
+
+      if not foundFinite then
+      begin
+        fMinValue := v;
+        fMaxValue := v;
+        foundFinite := true;
+      end
+      else
+      begin
+        if v < fMinValue then
+          fMinValue := v;
+        if v > fMaxValue then
+          fMaxValue := v;
+      end;
+    end;
+
+  if not foundFinite then
+    exit;
+
+  for var i := 0 to rows - 1 do
+    for var j := 0 to cols - 1 do
+    begin
+      var v := m[i, j];
+      var brush := new SolidColorBrush(ColorForValue(v));
+
+      var x0 := j;
+      var x1 := j + 1;
+
+      // Делаем нулевую строку верхней строкой матрицы.
+      var y0 := rows - i - 1;
+      var y1 := rows - i;
+
+      var poly := new Polygon;
+      var pts := new PointCollection;
+
+      pts.Add(new Point(x0, y0));
+      pts.Add(new Point(x0, y1));
+      pts.Add(new Point(x1, y1));
+      pts.Add(new Point(x1, y0));
+
+      PlotWPF.SetPoints(poly, pts);
+
+      poly.Fill := brush;
+      poly.Stroke := Brushes.LightGray;
+      poly.StrokeThickness := 0.5;
+
+      fCells.Add(poly);
+      Children.Add(poly);
+    end;
 end;
 
 procedure SurfacePlot.SetData(labels: array of integer;

@@ -32,20 +32,31 @@ type
     static procedure CheckNonEmpty(const v: Vector); 
     procedure SetData(i: integer; value: real) := fdata[i] := value;
   public
+    /// Массив элементов вектора.
     property Data: array of real read fdata;
+    /// Длина вектора.
     property Length: integer read fdata.Length;
+    /// Доступ к элементу вектора по индексу.
     property Item[i: integer]: real read fdata[i] write SetData; default;
     
+    /// Создаёт вектор заданной длины, заполненный нулями.
     constructor Create(n: integer);
+    /// Создаёт вектор из массива вещественных значений.
     constructor Create(values: array of real);
+    /// Создаёт вектор из массива целых значений.
     constructor Create(values: array of integer);
     
+    /// Возвращает копию вектора.
     function Clone: Vector;
     
+    /// Нормирует текущий вектор по евклидовой норме и возвращает его.
     function Normalize: Vector;
+    /// Возвращает нормированную копию вектора.
     function Normalized: Vector;
     
+    /// Возвращает копию данных в виде массива.
     function ToArray: array of real;
+    /// Преобразует элементы вектора в массив целых чисел.
     function ToIntArray: array of integer;
     
     static function operator +(a, b: Vector): Vector;
@@ -68,30 +79,44 @@ type
     // ---------- Векторные функции ----------
     /// Применить функцию ко всем элементам вектора
     function Apply(f: real -> real): Vector;
+    /// Возвращает вектор из квадратных корней элементов.
     function Sqrt: Vector;
+    /// Возвращает вектор из экспонент элементов.
     function Exp: Vector := Apply(PABCSystem.Exp);
+    /// Возвращает вектор из натуральных логарифмов элементов.
     function Ln: Vector := Apply(PABCSystem.Ln);
+    /// Возвращает вектор из модулей элементов.
     function Abs: Vector := Apply(PABCSystem.Abs);    
     
     // ---------- Основные методы ----------
+    /// Возвращает сумму элементов вектора.
     function Sum: real;
     /// Среднее. Синоним Mean
     function Average: real;
     /// Среднее
     function Mean: real;
+    /// Возвращает квадрат евклидовой нормы вектора.
     function Norm2: real;
+    /// Возвращает евклидову норму вектора.
     function Norm: real;
+    /// Возвращает максимальный элемент вектора.
     function Max: real;
+    /// Возвращает минимальный элемент вектора.
     function Min: real;
     /// Скалярное произведение
     function Dot(b: Vector): real;
     
     // ---------- Сервисные методы ----------
+    /// Возвращает строковое представление вектора.
     function ToString: string; override := $'{fdata.Select(x -> x.ToString(''G3''))}';
+    /// Возвращает строковое представление вектора с заданной точностью.
     function ToString(digits: integer): string := $'{fdata.Select(x -> x.ToString(''G''+digits))}';
+    /// Печатает вектор без перевода строки.
     procedure Print := fdata.Print;
+    /// Печатает вектор с переводом строки.
     procedure Println := fdata.Println;
     
+    /// Возвращает подмножество элементов по заданным индексам.
     function SubvectorBy(indices: array of integer): Vector;
   end;
   
@@ -105,56 +130,97 @@ type
     
     procedure SetData(i, j: integer; value: real) := fdata[i, j] := value;
   public
+    /// Число строк матрицы.
     property RowCount: integer read fdata.RowCount;
+    /// Число столбцов матрицы.
     property ColCount: integer read fdata.ColCount;
+    /// Данные матрицы в виде двумерного массива.
     property Data: array[,] of real read fdata;
     
+    /// Доступ к элементу матрицы по индексам строки и столбца.
     property Item[i, j: integer]: real
       read fdata[i, j] write SetData; default;
     
+    /// Создаёт матрицу заданного размера, заполненную нулями.
     constructor Create(r, c: integer);
+    /// Создаёт матрицу из двумерного массива вещественных значений.
     constructor Create(values: array[,] of real);
     
+    /// Возвращает копию данных в виде двумерного массива.
     function ToArray2D: array[,] of real;
+    /// Возвращает строку матрицы в виде массива.
     function RowToArray(r: integer): array of real;
     
+    /// Возвращает копию матрицы.
     function Clone: Matrix;
     
+    /// Возвращает строку матрицы в виде массива.
     function Row(i: integer): array of real := fdata.Row(i);
+    /// Возвращает столбец матрицы в виде массива.
     function Col(j: integer): array of real := fdata.Col(j);
 
+    /// Возвращает суммы по всем столбцам.
     function ColumnSums: Vector;
+    /// Возвращает суммы по всем строкам.
     function RowSums: Vector;
+    /// Возвращает средние значения по всем столбцам.
     function ColumnMeans: Vector;
+    /// Возвращает средние значения по всем строкам.
     function RowMeans: Vector;
+    /// Возвращает дисперсии по всем столбцам.
     function ColumnVariances: Vector;
+    /// Возвращает дисперсии по всем строкам.
     function RowVariances: Vector;
+    /// Возвращает стандартные отклонения по всем столбцам.
     function ColumnStd: Vector;
+    /// Возвращает стандартные отклонения по всем строкам.
     function RowStd: Vector;
+    /// Возвращает минимумы по всем столбцам.
     function ColumnMins: Vector;
+    /// Возвращает максимумы по всем столбцам.
     function ColumnMaxs: Vector;
+    /// Возвращает минимумы по всем строкам.
     function RowMins: Vector;
+    /// Возвращает максимумы по всем строкам.
     function RowMaxs: Vector;
     
+    /// Возвращает сумму элементов строки.
     function RowSum(i: integer): real;
+    /// Возвращает среднее значение элементов строки.
     function RowMean(i: integer): real;
+    /// Возвращает дисперсию элементов строки.
     function RowVariance(i: integer): real;
+    /// Возвращает стандартное отклонение элементов строки.
     function RowStd(i: integer): real;
+    /// Возвращает минимальный элемент строки.
     function RowMin(i: integer): real;
+    /// Возвращает максимальный элемент строки.
     function RowMax(i: integer): real;
+    /// Возвращает индекс минимального элемента строки.
     function RowArgMin(i: integer): integer;
+    /// Возвращает индекс максимального элемента строки.
     function RowArgMax(i: integer): integer;
     
+    /// Возвращает сумму элементов столбца.
     function ColumnSum(j: integer): real;
+    /// Возвращает среднее значение элементов столбца.
     function ColumnMean(j: integer): real;
+    /// Возвращает дисперсию элементов столбца.
     function ColumnVariance(j: integer): real;
+    /// Возвращает стандартное отклонение элементов столбца.
     function ColumnStd(j: integer): real;
+    /// Возвращает минимальный элемент столбца.
     function ColumnMin(j: integer): real;
+    /// Возвращает максимальный элемент столбца.
     function ColumnMax(j: integer): real;
+    /// Возвращает индекс минимального элемента столбца.
     function ColumnArgMin(j: integer): integer;
+    /// Возвращает индекс максимального элемента столбца.
     function ColumnArgMax(j: integer): integer;
     
+    /// Возвращает норму Фробениуса матрицы.
     function FrobeniusNorm: real;
+    /// Прибавляет lambda к диагональным элементам матрицы.
     procedure AddScaledIdentity(lambda: real);
 
     
@@ -206,13 +272,19 @@ type
     function PCA(k: integer): (Matrix, Vector);
     
     // ---------- Сервисные методы ----------
+    /// Возвращает строковое представление матрицы.
     function ToString: string; override := $'{fdata}';
+    /// Печатает матрицу без перевода строки.
     procedure Print := fdata.Print;
+    /// Печатает матрицу с переводом строки.
     procedure Println := fdata.Println;
     
+    /// Возвращает строку матрицы в виде вектора.
     function GetRow(i: integer): Vector;
+    /// Возвращает столбец матрицы в виде вектора.
     function GetCol(j: integer): Vector;
     
+    /// Возвращает матрицу, составленную из строк с заданными индексами.
     function TakeRows(indices: array of integer): Matrix;
 
     // ---------- Статические методы ----------

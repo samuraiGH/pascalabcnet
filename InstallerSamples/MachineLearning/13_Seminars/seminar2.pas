@@ -13,7 +13,7 @@ begin
   ]);
   
   // Препроцессинг
-  var imputer := new Imputer('population', 'lat', 'lon');
+  var imputer := new Imputer(['population', 'lat', 'lon']);
   df := imputer.FitTransform(df);
   
   var le1 := new LabelEncoder('region_name');

@@ -51,7 +51,7 @@ type
     function StratifiedTrainTestSplit(testRatio: real := 0.2; seed: integer := -1): (Dataset, Dataset);
   
     /// Возвращает первые n строк таблицы данных.
-    function Head(n: integer := 5): DataFrame;
+    function Head(n: integer := 10): DataFrame;
   
     /// Возвращает краткое описание датасета (метаданные).
     function Describe: DataFrame;
@@ -260,6 +260,9 @@ type
 
     /// Датасет российских городов (задача кластеризации)
     static function RussianCities: Dataset;
+
+    /// Датасет пассажиров Титаника (задача классификации)
+    static function TitanicRu: Dataset;
     
     {/// Датасет результатов экзамена студентов (классификация)
     static function StudentExam: Dataset;
@@ -411,6 +414,9 @@ end;
 
 function Dataset.TrainTestSplit(testRatio: real; shuffle: boolean; seed: integer): (Dataset, Dataset);
 begin
+  if Data = nil then
+    ArgumentNullError(ER_ARG_NULL, 'Data');
+
   var (trainDf, testDf) := Data.TrainTestSplit(testRatio, shuffle, seed);
 
   var trainDs := CloneMeta(trainDf);
@@ -423,96 +429,15 @@ function Dataset.StratifiedTrainTestSplit(testRatio: real; seed: integer): (Data
 begin
   if Data = nil then
     ArgumentNullError(ER_ARG_NULL, 'Data');
-  
-  if (testRatio <= 0.0) or (testRatio >= 1.0) then
-    ArgumentError(ER_TEST_RATIO_INVALID, testRatio);
-  
+
   if Task <> Classification then
     Error(ER_STRATIFIED_ONLY_FOR_CLASSIFICATION);
 
-  var n := Data.RowCount;
-  if n < 2 then
-    ArgumentError(ER_EMPTY_DATA, 'StratifiedTrainTestSplit');
-
-  var actualSeed := if seed >= 0 then seed else System.Environment.TickCount and integer.MaxValue;
-  var rnd := new System.Random(actualSeed);
-
-  // --- target column
-  var ci := Data.ColumnIndex(Target);
-  var col := Data.GetColumn(ci);
-
-  var groups := new Dictionary<object, List<integer>>;
-
-  // --- группировка по target
-  case col.Info.ColType of
-
-    ctInt:
-    begin
-      var data := IntColumn(col).Data;
-
-      for var i := 0 to n - 1 do
-      begin
-        var key: object := data[i];
-
-        var lst: List<integer>;
-        if not groups.TryGetValue(key, lst) then
-        begin
-          lst := new List<integer>;
-          groups[key] := lst;
-        end;
-
-        lst.Add(i);
-      end;
-    end;
-
-    ctStr:
-    begin
-      var data := StrColumn(col).Data;
-
-      for var i := 0 to n - 1 do
-      begin
-        var key: object := data[i];
-
-        var lst: List<integer>;
-        if not groups.TryGetValue(key, lst) then
-        begin
-          lst := new List<integer>;
-          groups[key] := lst;
-        end;
-
-        lst.Add(i);
-      end;
-    end;
-
-    else
-      Error(ER_GROUPBY_UNSUPPORTED_KEY_TYPE, col.Info.ColType);
-  end;
-
-  var trainIdx := new List<integer>;
-  var testIdx := new List<integer>;
-
-  // --- split внутри каждой группы
-  foreach var kvp in groups do
-  begin
-    var arr := kvp.Value.ToArray;
-    arr.Shuffle(rnd);
-
-    var m := arr.Length;
-    var rawSize := Round(m * testRatio);
-    var testSize := rawSize.Clamp(1, m - 1);
-
-    for var i := 0 to testSize - 1 do
-      testIdx.Add(arr[i]);
-
-    for var i := testSize to m - 1 do
-      trainIdx.Add(arr[i]);
-  end;
-
-  var trainDf := Data.TakeRows(trainIdx.ToArray);
-  var testDf := Data.TakeRows(testIdx.ToArray);
+  var (trainDf, testDf) :=
+    Data.StratifiedTrainTestSplit(Target, testRatio, seed);
 
   var trainDs := CloneMeta(trainDf);
-  var testDs := CloneMeta(testDf);
+  var testDs  := CloneMeta(testDf);
 
   Result := (trainDs, testDs);
 end;
@@ -1356,6 +1281,20 @@ begin
   ds.Data := ds.Data.SetCategorical([
     'region_name',
     'federal_district'
+  ]);
+
+  Result := ds;
+end;
+
+static function Datasets.TitanicRu: Dataset;
+begin
+  var ds := Load('titanic_ru');
+
+  ds.Data := ds.Data.SetCategorical([
+    'Выжил',
+    'Класс',
+    'Пол',
+    'ПортПосадки'
   ]);
 
   Result := ds;

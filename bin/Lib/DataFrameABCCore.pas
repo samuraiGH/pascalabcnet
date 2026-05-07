@@ -35,11 +35,14 @@ type
     fIndexByName: Dictionary<string, integer>;
     
     class function BuildIndex(names: array of string): Dictionary<string, integer>;
+    function GetColumnNames: array of string;
+    function GetTypes: array of ColumnType;
+    function GetCategoricalFlags: array of boolean;
   public
     property ColumnCount: integer read fNames.Length;
-    property ColumnNames: array of string read fNames;
-    property Types: array of ColumnType read fTypes;
-    property CategoricalFlags: array of boolean read fCategoricalFlags;
+    property ColumnNames: array of string read GetColumnNames;
+    property Types: array of ColumnType read GetTypes;
+    property CategoricalFlags: array of boolean read GetCategoricalFlags;
 
     function IndexOf(name: string): integer;
     function HasColumn(name: string): boolean;
@@ -79,9 +82,14 @@ type
     procedure AssertConsistent;
   end;
   
-  ColumnInfo = auto class
-    Name: string;
-    ColType: ColumnType;
+  ColumnInfo = sealed class
+  private
+    fName: string;
+    fColType: ColumnType;
+  public
+    property Name: string read fName;
+    property ColType: ColumnType read fColType;
+    constructor Create(name: string; colType: ColumnType);
     //IsCategorical - только в Schema!
   end;
   
@@ -178,7 +186,7 @@ type
     function Equals(oth: object): boolean; override;
     function GetHashCode: integer; override;
   end;
-  
+
     /// Курсор для итерации по строкам DataFrame
   DataFrameCursor = class
   private
@@ -243,6 +251,8 @@ type
     /// Максимальное значение
     Max: real;
   end;
+
+function MergedRightColumnName(leftSchema, rightSchema: DataFrameSchema; rightIndex: integer): string;
   
 implementation
 
@@ -331,6 +341,21 @@ begin
   end;
 end;
 
+function DataFrameSchema.GetColumnNames: array of string;
+begin
+  Result := Copy(fNames);
+end;
+
+function DataFrameSchema.GetTypes: array of ColumnType;
+begin
+  Result := Copy(fTypes);
+end;
+
+function DataFrameSchema.GetCategoricalFlags: array of boolean;
+begin
+  Result := Copy(fCategoricalFlags);
+end;
+
 constructor DataFrameSchema.Create(names: array of string; types: array of ColumnType;
   isCategorical: array of boolean);
 begin
@@ -355,6 +380,12 @@ begin
   fIndexByName := BuildIndex(fNames);
 
   AssertConsistent;
+end;
+
+constructor ColumnInfo.Create(name: string; colType: ColumnType);
+begin
+  fName := name;
+  fColType := colType;
 end;
 
 procedure DataFrameSchema.Print;
@@ -546,6 +577,13 @@ begin
     end;
 
   Result := new DataFrameSchema(names.ToArray, types.ToArray, cats.ToArray);
+end;
+
+function MergedRightColumnName(leftSchema, rightSchema: DataFrameSchema; rightIndex: integer): string;
+begin
+  Result := rightSchema.NameAt(rightIndex);
+  if leftSchema.HasColumn(Result) then
+    Result := 'right_' + Result;
 end;
 
 procedure DataFrameSchema.AssertConsistent;

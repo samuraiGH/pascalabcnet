@@ -21,6 +21,7 @@ unit PreprocessorABC;
 interface
 
 uses DataFrameABC;
+uses DataFrameABCCore;
 uses System;
 uses MLCoreABC;
 
@@ -122,9 +123,9 @@ type
 
   ImputeStrategy = (isMean, isConstant, isMedian);
 
-/// Заполняет пропущенные значения (NA) в числовых столбцах
-/// Поддерживает стратегии isMean и isConstant
-/// Работает только с Int и Float столбцами
+/// Заполняет пропущенные значения (NA) в столбцах DataFrame
+/// Стратегии isMean и isMedian работают только с числовыми столбцами
+/// Стратегия isConstant работает с любыми поддерживаемыми типами
   Imputer = class(IPreprocessor, IColumnsBoundStep)
   private
     cols: array of string;
@@ -133,13 +134,14 @@ type
     means: array of real;
     medians: array of real;
     fitted: boolean;
+    function BuildImputedColumn(df: DataFrame; idx, imputerIndex: integer): Column;
   public
     /// Создаёт Imputer с заполнением средним значением
-    constructor Create(params columns: array of string);
+    constructor Create(columns: array of string);
     /// Создаёт Imputer с заданной стратегией заполнения
-    constructor Create(strategy: ImputeStrategy; params columns: array of string);
+    constructor Create(strategy: ImputeStrategy; columns: array of string);
     /// Создаёт Imputer с константной стратегией заполнения
-    constructor Create(value: object; params columns: array of string);
+    constructor Create(value: object; columns: array of string);
   
 /// Вычисляет значения для заполнения пропусков.
 ///   df — таблица данных.
@@ -216,6 +218,8 @@ const
     'Стратегия импутации {0} не поддерживается!!Imputation strategy {0} is not supported';
   ER_UNSUPPORTED_IMPUTE_STRATEGY =
     'Неподдерживаемая стратегия заполнения: {0}!!Unsupported impute strategy: {0}';
+  ER_UNSUPPORTED_COLUMN_TYPE =
+    'Неподдерживаемый тип столбца!!Unsupported column type';
   ER_ONEHOT_NAME_EQUALS_SOURCE =
     'Сгенерированная колонка совпадает с исходной: {0}!!Generated column equals source column: {0}';
   ER_ONEHOT_COLUMN_COLLISION =
@@ -313,7 +317,15 @@ begin
     else
       res.AddIntColumn(col, data, valid);
 
-  Result := res.SetCategorical([col]);
+  var catCols := new List<string>;
+  
+  foreach var name in df.Schema.ColumnNames do
+    if df.IsCategorical(name) and (name <> col) then
+      catCols.Add(name);
+  
+  catCols.Add(col); // encoded колонка тоже categorical
+  
+  Result := res.SetCategorical(catCols.ToArray);
 end;
 
 function LabelEncoder.FitTransform(df: DataFrame): DataFrame;
@@ -330,6 +342,24 @@ end;
 function LabelEncoder.Clone: IPreprocessor;
 begin
   Result := new LabelEncoder(col);
+end;
+
+procedure AppendAllColumnsExcept(
+  res, src: DataFrame;
+  skipIndex: integer;
+  names: List<string>;
+  types: List<ColumnType>;
+  cats: List<boolean>
+);
+begin
+  for var i := 0 to src.ColumnCount - 1 do
+    if i <> skipIndex then
+    begin
+      res.AddColumnAlias(src.GetColumn(i));
+      names.Add(src.Schema.NameAt(i));
+      types.Add(src.Schema.ColumnTypeAt(i));
+      cats.Add(src.Schema.IsCategoricalAt(i));
+    end;
 end;
 //-----------------------------
 //        OneHotEncoder
@@ -413,42 +443,56 @@ begin
   if srcIdx < 0 then
     ArgumentError(ER_COLUMN_NOT_FOUND, col);
   
+  var rowCount := df.RowCount;
   var catCount := categories.Length;
-
-  var res := df;
-
-  // === Генерация one-hot столбцов ===
+  var res := new DataFrame;
+  
+  var names := new List<string>;
+  var types := new List<ColumnType>;
+  var cats := new List<boolean>;
+  
+  AppendAllColumnsExcept(res, df, srcIdx, names, types, cats);
+  
+  var srcCol := StrColumn(df.GetColumn(srcIdx));
+  var srcData := srcCol.Data;
+  var srcValid := srcCol.IsValid;
+  
+  var dataCols := new List<array of integer>;
+  var validCols := new List<array of boolean>;
+  
   for var j := 0 to catCount - 1 do
   begin
-    var catIdx := j;
-    var newName := col + '_' + categories[j];
-
-    var Encode: DataFrameCursor -> integer := c ->
-    begin
-      if not c.IsValid(col) then
-      begin
-        Result := 0;
-        exit;
-      end;
-    
-      var s := c.Str(col);
-    
-      var idx: integer;
-      if not indexByValue.TryGetValue(s, idx) then
-      begin
-        Result := 0;
-        exit;
-      end;
-    
-      Result := Ord(idx = catIdx);
-    end;
-
-    res := res.AddDerivedIntColumn(newName, Encode);
+    dataCols.Add(new integer[rowCount]);
+    validCols.Add([True] * rowCount);
   end;
-
-  // === удаление исходного столбца ===
-  res := res.Drop([srcIdx]);
-
+  
+  for var row := 0 to rowCount - 1 do
+  begin
+    if (srcValid <> nil) and not srcValid[row] then
+      continue;
+    
+    var s := srcData[row];
+    
+    var idx: integer;
+    if indexByValue.TryGetValue(s, idx) then
+      dataCols[idx][row] := 1;
+  end;
+  
+  for var j := 0 to catCount - 1 do
+  begin
+    var newName := col + '_' + categories[j];
+    res.AddIntColumn(newName, dataCols[j], validCols[j]);
+    names.Add(newName);
+    types.Add(ColumnType.ctInt);
+    cats.Add(False);
+  end;
+  
+  res.SetSchema(new DataFrameSchema(
+    names.ToArray,
+    types.ToArray,
+    cats.ToArray
+  ));
+  
   Result := res;
 end;
 
@@ -487,7 +531,7 @@ end;
 //        Imputer
 //-----------------------------
 
-constructor Imputer.Create(strategy: ImputeStrategy; params columns: array of string);
+constructor Imputer.Create(strategy: ImputeStrategy; columns: array of string);
 begin
   if (columns = nil) or (columns.Length = 0) then
     ArgumentError(ER_IMPUTER_NO_COLUMNS);
@@ -498,12 +542,12 @@ begin
   fitted := false;
 end;
 
-constructor Imputer.Create(params columns: array of string);
+constructor Imputer.Create(columns: array of string);
 begin
   Create(ImputeStrategy.isMean, columns);
 end;
 
-constructor Imputer.Create(value: object; params columns: array of string);
+constructor Imputer.Create(value: object; columns: array of string);
 begin
   if (columns = nil) or (columns.Length = 0) then
     ArgumentError(ER_IMPUTER_NO_COLUMNS);
@@ -600,6 +644,179 @@ begin
   Result := Self;
 end;
 
+function Imputer.BuildImputedColumn(df: DataFrame; idx, imputerIndex: integer): Column;
+begin
+  var name := cols[imputerIndex];
+  var ct := df.Schema.ColumnTypeAt(idx);
+  var capturedIdx := idx;
+  
+  case strategy of
+    isMean:
+    begin
+      if not (ct in [ColumnType.ctInt, ColumnType.ctFloat]) then
+        Error(ER_IMPUTER_COLUMN_NOT_NUMERIC, name);
+
+      var m := means[imputerIndex];
+      var rowCount := df.RowCount;
+      var data := new real[rowCount];
+      var valid := new boolean[rowCount];
+      
+      var cur := df.GetCursor;
+      var row := 0;
+      while cur.MoveNext do
+      begin
+        data[row] := if cur.IsValid(capturedIdx) then cur.Float(capturedIdx) else m;
+        valid[row] := True;
+        row += 1;
+      end;
+      
+      Result := new FloatColumn(name, data, valid);
+    end;
+
+    isConstant:
+    begin
+      var v := constants[imputerIndex];
+      if v = nil then
+        Error(ER_IMPUTER_CONSTANT_VALUE_NULL, name);
+
+      if ct = ColumnType.ctInt then
+      begin
+        var k: integer;
+
+        if v is integer then
+          k := integer(v)
+        else if v is real then
+        begin
+          var r := real(v);
+          var ir := Round(r);
+          if Abs(r - ir) > 1e-9 then
+            Error(ER_IMPUTER_CONSTANT_TYPE_MISMATCH, name);
+          k := ir;
+        end
+        else
+          Error(ER_IMPUTER_CONSTANT_TYPE_MISMATCH, name);
+        
+        var rowCount := df.RowCount;
+        var data := new integer[rowCount];
+        var valid := new boolean[rowCount];
+        
+        var cur := df.GetCursor;
+        var row := 0;
+        while cur.MoveNext do
+        begin
+          data[row] := if cur.IsValid(capturedIdx) then cur.Int(capturedIdx) else k;
+          valid[row] := True;
+          row += 1;
+        end;
+        
+        Result := new IntColumn(name, data, valid);
+      end
+      else if ct = ColumnType.ctFloat then
+      begin
+        var r: real;
+        try
+          r := real(v);
+        except
+          on e: Exception do
+            Error(ER_IMPUTER_CONSTANT_TYPE_MISMATCH, name);
+        end;
+        
+        var rowCount := df.RowCount;
+        var data := new real[rowCount];
+        var valid := new boolean[rowCount];
+        
+        var cur := df.GetCursor;
+        var row := 0;
+        while cur.MoveNext do
+        begin
+          data[row] := if cur.IsValid(capturedIdx) then cur.Float(capturedIdx) else r;
+          valid[row] := True;
+          row += 1;
+        end;
+        
+        Result := new FloatColumn(name, data, valid);
+      end
+      else if ct = ColumnType.ctStr then
+      begin
+        var s: string;
+        try
+          s := string(v);
+        except
+          on e: Exception do
+            Error(ER_IMPUTER_CONSTANT_TYPE_MISMATCH, name);
+        end;
+
+        var rowCount := df.RowCount;
+        var data := new string[rowCount];
+        var valid := new boolean[rowCount];
+
+        var cur := df.GetCursor;
+        var row := 0;
+        while cur.MoveNext do
+        begin
+          data[row] := if cur.IsValid(capturedIdx) then cur.Str(capturedIdx) else s;
+          valid[row] := True;
+          row += 1;
+        end;
+
+        Result := new StrColumn(name, data, valid);
+      end
+      else if ct = ColumnType.ctBool then
+      begin
+        var b: boolean;
+        try
+          b := boolean(v);
+        except
+          on e: Exception do
+            Error(ER_IMPUTER_CONSTANT_TYPE_MISMATCH, name);
+        end;
+
+        var rowCount := df.RowCount;
+        var data := new boolean[rowCount];
+        var valid := new boolean[rowCount];
+
+        var cur := df.GetCursor;
+        var row := 0;
+        while cur.MoveNext do
+        begin
+          data[row] := if cur.IsValid(capturedIdx) then cur.Bool(capturedIdx) else b;
+          valid[row] := True;
+          row += 1;
+        end;
+
+        Result := new BoolColumn(name, data, valid);
+      end
+      else
+        Error(ER_UNSUPPORTED_COLUMN_TYPE, ct);
+    end;
+
+    isMedian:
+    begin
+      if not (ct in [ColumnType.ctInt, ColumnType.ctFloat]) then
+        Error(ER_IMPUTER_COLUMN_NOT_NUMERIC, name);
+
+      var m := medians[imputerIndex];
+      var rowCount := df.RowCount;
+      var data := new real[rowCount];
+      var valid := new boolean[rowCount];
+      
+      var cur := df.GetCursor;
+      var row := 0;
+      while cur.MoveNext do
+      begin
+        data[row] := if cur.IsValid(capturedIdx) then cur.Float(capturedIdx) else m;
+        valid[row] := True;
+        row += 1;
+      end;
+      
+      Result := new FloatColumn(name, data, valid);
+    end;
+    
+    else
+      Error(ER_IMPUTER_STRATEGY_NOT_SUPPORTED, strategy);
+  end;
+end;
+
 function Imputer.Transform(df: DataFrame): DataFrame;
 begin
   if not fitted then
@@ -610,90 +827,39 @@ begin
      ((constants = nil) or (constants.Length <> cols.Length)) then
     Error(ER_IMPUTER_CONSTANTS_INVALID);
 
-  var res := df;
-
-  for var i := 0 to cols.Length - 1 do
+  var imputeCols := new HashSet<string>(cols);
+  var res := new DataFrame;
+  var names := new List<string>;
+  var types := new List<ColumnType>;
+  var cats := new List<boolean>;
+  
+  for var i := 0 to df.ColumnCount - 1 do
   begin
-    var name := cols[i];
-
-    // --- ВАЖНО: используем актуальную схему
-    var idx := res.Schema.IndexOf(name);
-    var ct := res.Schema.ColumnTypeAt(idx);
-
-    if not (ct in [ColumnType.ctInt, ColumnType.ctFloat]) then
-      Error(ER_IMPUTER_COLUMN_NOT_NUMERIC, name);
-
-    var capturedIdx := idx;
+    var name := df.Schema.NameAt(i);
+    var imputerIndex := cols.IndexOf(name);
     
-    case strategy of
-      isMean:
-      begin
-        var m := means[i];
-        res := res.ReplaceColumnFloat(
-          name,
-          c -> (if c.IsValid(capturedIdx) then c.Float(capturedIdx) else m)
-        );
-      end;
-
-      isConstant:
-      begin
-        var v := constants[i];
-        if v = nil then
-          Error(ER_IMPUTER_CONSTANT_VALUE_NULL, name);
-
-        if ct = ColumnType.ctInt then
-        begin
-          var k: integer;
-
-          if v is integer then
-            k := integer(v)
-          else if v is real then
-          begin
-            var r := real(v);
-            var ir := Round(r);
-            if Abs(r - ir) > 1e-9 then
-              Error(ER_IMPUTER_CONSTANT_TYPE_MISMATCH, name);
-            k := ir;
-          end
-          else
-            Error(ER_IMPUTER_CONSTANT_TYPE_MISMATCH, name);
-
-          res := res.ReplaceColumnInt(
-            name,
-            c -> (if c.IsValid(capturedIdx) then c.Int(capturedIdx) else k)
-          );
-        end
-        else // ctFloat
-        begin
-          var r: real;
-          try
-            r := real(v);
-          except
-            on e: Exception do
-              Error(ER_IMPUTER_CONSTANT_TYPE_MISMATCH, name);
-          end;
-
-          res := res.ReplaceColumnFloat(
-            name,
-            c -> (if c.IsValid(capturedIdx) then c.Float(capturedIdx) else r)
-          );
-        end;
-      end;
-
-      isMedian:
-      begin
-        var m := medians[i];
-        res := res.ReplaceColumnFloat(
-          name,
-          c -> (if c.IsValid(capturedIdx) then c.Float(capturedIdx) else m)
-        );
-      end;
-
-      else
-        Error(ER_IMPUTER_STRATEGY_NOT_SUPPORTED, strategy);
+    if (name in imputeCols) and (imputerIndex >= 0) then
+    begin
+      var col := BuildImputedColumn(df, i, imputerIndex);
+      res.AddColumnAlias(col);
+      names.Add(name);
+      types.Add(col.Info.ColType);
+      cats.Add(df.Schema.IsCategoricalAt(i));
+    end
+    else
+    begin
+      res.AddColumnAlias(df.GetColumn(i));
+      names.Add(name);
+      types.Add(df.Schema.ColumnTypeAt(i));
+      cats.Add(df.Schema.IsCategoricalAt(i));
     end;
   end;
-
+  
+  res.SetSchema(new DataFrameSchema(
+    names.ToArray,
+    types.ToArray,
+    cats.ToArray
+  ));
   Result := res;
 end;
 

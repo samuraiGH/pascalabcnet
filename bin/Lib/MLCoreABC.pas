@@ -108,14 +108,17 @@ type
 
   /// Интерфейс классификатора.
   /// Наследуется от IModel.
-  /// Предназначен для моделей, выполняющих классификацию (предсказание меток классов).
-  IClassifier = interface(ISupervisedModel)
-    /// Возвращает индексы классов (0,1,2,...)
-    function PredictLabels(X: Matrix): array of integer;
-    
-    /// Возвращает метки классов в порядке кодирования
-    function GetClassLabels: array of string;
-    
+    /// Предназначен для моделей, выполняющих классификацию (предсказание меток классов).
+    IClassifier = interface(ISupervisedModel)
+      /// Возвращает внутренние индексы классов (0,1,2,...).
+      /// Индекс i соответствует метке GetClassLabels[i].
+      function PredictLabels(X: Matrix): array of integer;
+      
+      /// Возвращает исходные метки классов в порядке внутреннего кодирования.
+      function GetClassLabels: array of string;
+    end;
+  
+  IClassifierInternal = interface
     procedure SetClassLabels(classes: array of string);
   end;
   

@@ -115,17 +115,31 @@ type
     function Transform(df: DataFrame): DataFrame;
     
     /// Делает предсказание модели для объектов из DataFrame.
+    /// Для задач классификации возвращает внутренние индексы классов (0..K-1).
+    /// В отличие от обычных моделей-классификаторов, здесь Predict
+    /// возвращает не исходные метки классов, а их внутренние индексы.
     /// Доступен после обучения конвейера (Fit).
     function Predict(df: DataFrame): Vector;
+    
+    /// Возвращает исходные строковые метки классов для объектов из DataFrame.
+    /// Это удобная расшифровка результата Predict через GetClassLabels.
+    /// Доступен только для задач классификации после Fit.
+    function PredictLabels(df: DataFrame): array of string;
     
     /// Возвращает матрицу вероятностей (nSamples × nClasses).
     /// Доступен только если конечная модель поддерживает IProbabilisticClassifier.
     function PredictProba(df: DataFrame): Matrix;
     
-    /// Возвращает метки классов в порядке кодирования (0,1,2,...),
-    /// используемом при EncodeLabels.
-    /// Доступен только для задач классификации после Fit.
+    /// Возвращает исходные метки классов в порядке внутреннего кодирования (0..K-1),
+    /// соответствующем индексам, возвращаемым Predict.
+    /// Доступен только для задач классификации.
     function GetClassLabels: array of string;
+    
+    /// Возвращает внутренние индексы истинных меток классов для DataFrame
+    /// в соответствии с кодированием, полученным при Fit.
+    /// Используется для вычисления метрик после Predict.
+    /// Доступен только для задач классификации после Fit.
+    function GetEncodedLabels(df: DataFrame): Vector;
     
     function ToString: string; override;
     
@@ -221,6 +235,7 @@ implementation
 
 uses MLExceptions;
 uses DataAdapters;
+uses MLUtilsABC;
 
 const
   ER_PIPELINE_MODIFY_AFTER_FIT =
@@ -282,12 +297,16 @@ const
     'Операция доступна только для задач классификации!!Operation is only available for classification tasks';
   ER_CLASSES_NOT_AVAILABLE = 
     'Метки классов недоступны. Убедитесь, что конвейер обучен и задача — классификация!!Class labels are not available. Ensure the pipeline is fitted and the task is classification';  
+  ER_LABEL_INDEX_OUT_OF_RANGE =
+    'Индекс метки {0} вне диапазона [0, {1})!!Label index {0} is out of range [0, {1})';
   ER_LABELENCODER_TARGET_NOT_ALLOWED =
     'LabelEncoder нельзя применять к целевой переменной — кодирование выполняется внутри модели!!LabelEncoder cannot be applied to target — encoding is handled internally by the model';
   ER_ENCODELABELS_NOT_CATEGORICAL =
     'Целевой столбец должен быть категориальным для задач классификации!!Target column must be categorical for classification tasks';
   ER_REGRESSION_TARGET_MUST_BE_NUMERIC =
     'Целевой столбец "{0}" должен быть числовым для задач регрессии!!Target column "{0}" must be numeric for regression tasks';
+  ER_PREPROCESSOR_ROWCOUNT_CHANGED =
+    'DataFrame-преобразователь не должен изменять число строк!!DataFrame preprocessor must preserve RowCount';
   ER_PIPELINE_TARGET_TRANSFORM_NOT_ALLOWED =
     'Преобразование целевой переменной "{0}" запрещено в DataPipeline!!' +
     'Transformation of target variable "{0}" is not allowed in DataPipeline';    
@@ -403,8 +422,11 @@ begin
   // --- DataFrame steps
   for var i := 0 to fDataSteps.Count - 1 do
   begin
+    var prevRows := current.RowCount;
     fDataSteps[i] := fDataSteps[i].Fit(current);
     current := fDataSteps[i].Transform(current);
+    if current.RowCount <> prevRows then
+      Error(ER_PREPROCESSOR_ROWCOUNT_CHANGED);
   end;
 
   fFinalFeatures := ResolveFinalFeatures(current);
@@ -421,7 +443,12 @@ begin
 
   var current := df;
   foreach var s in fDataSteps do
+  begin
+    var prevRows := current.RowCount;
     current := s.Transform(current);
+    if current.RowCount <> prevRows then
+      Error(ER_PREPROCESSOR_ROWCOUNT_CHANGED);
+  end;
 
   Result := current;
 end;
@@ -631,7 +658,7 @@ begin
 
   if fTask = tkClassification then
   begin
-    if fModel is IClassifier(var cls) then
+    if fModel is IClassifierInternal(var cls) then
       cls.SetClassLabels(classes)
     else
       Error(ER_MODEL_NOT_CLASSIFIER);
@@ -642,6 +669,7 @@ begin
 end;
 
 function DataPipeline.Transform(df: DataFrame): DataFrame := TransformDataFrame(df);
+
 
 function DataPipeline.Predict(df: DataFrame): Vector;
 begin
@@ -664,6 +692,28 @@ begin
   Result := (fModel as IPredictiveModel).Predict(X);
 end;
 
+function DataPipeline.PredictLabels(df: DataFrame): array of string;
+begin
+  if not fFitted then
+    NotFittedError(ER_FIT_NOT_CALLED);
+
+  if fTask <> tkClassification then
+    ArgumentError(ER_NOT_CLASSIFICATION);
+
+  var encoded := LabelsToInts(Predict(df));
+  var classes := GetClassLabels;
+  Result := new string[encoded.Length];
+  
+  for var i := 0 to encoded.Length - 1 do
+  begin
+    var idx := encoded[i];
+    if (idx < 0) or (idx >= classes.Length) then
+      Error(ER_LABEL_INDEX_OUT_OF_RANGE, idx, classes.Length);
+    
+    Result[i] := classes[idx];
+  end;
+end;
+
 function DataPipeline.PredictProba(df: DataFrame): Matrix;
 begin
   if df = nil then
@@ -683,6 +733,25 @@ begin
   X := TransformMatrix(X);
 
   Result := (fModel as IProbabilisticClassifier).PredictProba(X);
+end;
+
+function DataPipeline.GetEncodedLabels(df: DataFrame): Vector;
+begin
+  if not fFitted then
+    NotFittedError(ER_FIT_NOT_CALLED);
+
+  if fTask <> tkClassification then
+    ArgumentError(ER_NOT_CLASSIFICATION);
+
+  if df = nil then
+    ArgumentNullError(ER_ARG_NULL, 'df');
+
+  if not df.HasColumn(fTarget) then
+    ArgumentError(ER_COLUMN_NOT_FOUND, fTarget);
+
+  var classes := GetClassLabels;
+  var labels := df.TransformLabels(fTarget, classes);
+  Result := new Vector(labels);
 end;
 
 function DataPipeline.GetClassLabels: array of string;
@@ -929,8 +998,11 @@ begin
   // --- 1) DataFrame шаги
   for var i := 0 to fDataSteps.Count - 1 do
   begin
+    var prevRows := current.RowCount;
     fDataSteps[i] := fDataSteps[i].Fit(current);
     current := fDataSteps[i].Transform(current);
+    if current.RowCount <> prevRows then
+      Error(ER_PREPROCESSOR_ROWCOUNT_CHANGED);
   end;
 
   // --- 2) вычислить финальные признаки

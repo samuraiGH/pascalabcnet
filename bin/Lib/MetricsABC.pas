@@ -1028,8 +1028,21 @@ begin
   var correct := 0;
 
   for var i := 0 to n - 1 do
-    if Round(yTrue[i]) = Round(yPred[i]) then
+  begin
+    var yt := yTrue[i];
+    var yp := yPred[i];
+    var ytInt := Round(yt);
+    var ypInt := Round(yp);
+    
+    if Abs(yt - ytInt) > 1e-12 then
+      ArgumentError(ER_INVALID_CLASS_LABEL, yt);
+    
+    if Abs(yp - ypInt) > 1e-12 then
+      ArgumentError(ER_INVALID_CLASS_LABEL, yp);
+    
+    if ytInt = ypInt then
       correct += 1;
+  end;
 
   Result := correct / n;
 end;
@@ -1078,12 +1091,13 @@ begin
   for var i := 0 to n - 1 do
   begin
     var yt := data[i];
+    var ytInt := Round(yt);
 
     // проверка: метки должны быть целыми
-    if Abs(yt - integer(yt)) > 1e-12 then
+    if Abs(yt - ytInt) > 1e-12 then
       ArgumentError(ER_INVALID_CLASS_LABEL, yt);
 
-    if integer(yt) = yPred[i] then
+    if ytInt = yPred[i] then
       correct += 1;
   end;
 
@@ -1944,8 +1958,8 @@ begin
     if double.IsNaN(yp) or double.IsInfinity(yp) then
       ArgumentError(ER_INVALID_VALUE, 'yPred', i);
 
-    var ytInt := integer(yt);
-    var ypInt := integer(yp);
+    var ytInt := Round(yt);
+    var ypInt := Round(yp);
 
     if Abs(yt - ytInt) > 1e-12 then
       ArgumentError(ER_INVALID_CLASS_LABEL, yt);

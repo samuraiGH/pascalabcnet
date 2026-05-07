@@ -304,7 +304,7 @@ type
 ///   для двух классов — частный случай softmax.
 /// Оптимизация выполняется по кросс-энтропийной функции потерь
 ///   с поддержкой L2-регуляризации
-  LogisticRegression = class(IProbabilisticClassifier)
+  LogisticRegression = class(IProbabilisticClassifier, IClassifierInternal)
   private
     fW: Matrix;      // p x k
     fIntercept: Vector; // k
@@ -427,6 +427,21 @@ type
       Result.Threshold := threshold;
     end;
   end;
+
+  RegSplitResult = record
+    Found: boolean;
+    Feature: integer;
+    Threshold: real;
+    WeightedScore: real;
+    
+    static function Invalid: RegSplitResult;
+    begin
+      Result.Found := false;
+      Result.Feature := -1;
+      Result.Threshold := 0.0;
+      Result.WeightedScore := real.PositiveInfinity;
+    end;
+  end;
   
 /// Интерфейс критерия разбиения узла дерева.
 /// Определяет функцию нечистоты (impurity), которая используется для оценки качества разбиения
@@ -523,7 +538,7 @@ type
 
     function BuildNode(X: Matrix; y: Vector; indices: array of integer; depth: integer): DecisionTreeNode;
 
-    function FindBestSplit(X: Matrix; y: Vector; indices: array of integer;
+    function FindBestSplitCore(X: Matrix; y: Vector; indices: array of integer;
       var bestF: integer; var bestT: real): boolean;
 
     function MajorityClass(y: Vector; indices: array of integer): integer;
@@ -534,84 +549,6 @@ type
     function Clone: DecisionTreeCore;
   end;  
   
-//============================  
-//    DecisionTreeBase
-//============================  
-/// Базовый абстрактный класс дерева решений.
-/// Используется только DecisionTreeRegressor
-/// Classifier использует DecisionTreeCore
-/// Реализует общую логику построения структуры дерева:
-///   рекурсивное разбиение, контроль глубины,
-///   минимального числа объектов и расчет важности признаков.
-/// Конкретная логика вычисления значения листа и критерия разбиения задается в наследнике
-  DecisionTreeRegressorBase = abstract class(ITreeModel)
-  protected
-    fRoot: DecisionTreeNode;
-    fMaxDepth: integer;
-    fMinSamplesSplit: integer;
-    fMinSamplesLeaf: integer;
-    fFitted: boolean;
-    fCriterion: ISplitCriterion;
-    fFeatureImportances: Vector;
-    fRandomSeed: integer;
-    fMaxFeatures: integer := 0;
-    fRowIndices: array of integer := nil;
-    
-    fRng: System.Random;
-    fUserProvidedSeed: boolean;
-  
-    function BuildTree(X: Matrix; y: Vector; indices: array of integer; depth: integer): DecisionTreeNode;
-  
-    //function FindBestSplit0(X: Matrix; y: Vector; indices: array of integer): SplitResult;
-    
-    function FindBestSplit(X: Matrix; y: Vector; indices: array of integer): SplitResult; virtual; abstract;
-    function IsPure(y: Vector; indices: array of integer): boolean; virtual;
-// --------------------------    
-  
-    function LeafValue(y: Vector; indices: array of integer): real; virtual; abstract;
-    function LeafNode(value: real): DecisionTreeNode;
-    procedure CopyBaseState(dest: DecisionTreeRegressorBase);
-    function GetFeatureSubset(nFeatures: integer): array of integer; virtual;
-    
-    procedure SetRowIndices(rows: array of integer);
-  public
-/// Создает дерево решений:
-///   • maxDepth — максимальная глубина дерева.
-///   • minSamplesSplit — минимальное число объектов для разбиения узла.
-///   • minSamplesLeaf — минимальное число объектов в листе
-    constructor Create(maxDepth: integer; minSamplesSplit: integer; minSamplesLeaf: integer; 
-      criterion: ISplitCriterion; seed: integer);
-  
-/// Возвращает вектор важности признаков.
-/// Важность вычисляется как суммарное уменьшение
-///   нечистоты (impurity reduction) по всем разбиениям.
-/// Значения нормированы так, что сумма равна 1.
-    function FeatureImportances: Vector;
-    
-/// Обучает дерево решений для задачи регрессии.
-///   X — матрица m × n (m объектов, n признаков).
-///   y — вектор длины m с непрерывными значениями.
-///
-/// Примечание:
-///   • обученное состояние дерева НЕ копируется методом Clone
-    function Fit(X: Matrix; y: Vector): ISupervisedModel; virtual; abstract;
-
-/// Выполняет предсказание для матрицы X.
-/// Возвращает вектор прогнозов.
-/// Для регрессии — вещественные значения.
-/// Для классификации — метки классов.
-    function Predict(X: Matrix): Vector; virtual; abstract;
-
-/// Копирует только конфигурацию модели (без обученного состояния).
-/// Используется для создания независимых экземпляров модели.
-    function Clone: IModel; virtual; abstract;
-
-/// Возвращает true, если дерево обучено.
-/// Если false — Predict вызовет ошибку.
-    property IsFitted: boolean read fFitted;
-    
-    function Name: string := Self.GetType.Name;
-  end;
 
 //============================  
 //   DecisionTreeClassifier  
@@ -619,7 +556,7 @@ type
 /// Дерево решений для задачи классификации.
 /// Использует критерий нечистоты (обычно Gini) для выбора оптимальных разбиений.
 /// В листьях хранится наиболее частый класс
-  DecisionTreeClassifier = class(IClassifier)
+  DecisionTreeClassifier = class(IClassifier, IClassifierInternal)
   private
     fMaxDepth: integer;
     fMinSamplesSplit: integer;
@@ -688,6 +625,78 @@ type
   end;
   
 //============================  
+//    DecisionTreeRegressorBase
+//============================  
+/// Базовый абстрактный класс дерева решений.
+/// Используется только DecisionTreeRegressor
+/// Classifier использует DecisionTreeCore
+/// Реализует общую логику построения структуры дерева:
+///   рекурсивное разбиение, контроль глубины,
+///   минимального числа объектов и расчет важности признаков.
+/// Конкретная логика вычисления значения листа и критерия разбиения задается в наследнике
+  DecisionTreeRegressorBase = abstract class(ITreeModel)
+  protected
+    fRoot: DecisionTreeNode;
+    fMaxDepth: integer;
+    fMinSamplesSplit: integer;
+    fMinSamplesLeaf: integer;
+    fFitted: boolean;
+    fCriterion: ISplitCriterion;
+    fFeatureImportances: Vector;
+    fRandomSeed: integer;
+    fMaxFeatures: integer := 0;
+    fRowIndices: array of integer := nil;
+    
+    fRng: System.Random;
+    fUserProvidedSeed: boolean;
+  
+    function IsPure(y: Vector; indices: array of integer): boolean; virtual;
+// --------------------------    
+  
+    function LeafValue(y: Vector; indices: array of integer): real; virtual; abstract;
+    function LeafNode(value: real): DecisionTreeNode;
+    
+    procedure SetRowIndices(rows: array of integer);
+  public
+/// Создает дерево решений:
+///   • maxDepth — максимальная глубина дерева.
+///   • minSamplesSplit — минимальное число объектов для разбиения узла.
+///   • minSamplesLeaf — минимальное число объектов в листе
+    constructor Create(maxDepth: integer; minSamplesSplit: integer; minSamplesLeaf: integer; 
+      criterion: ISplitCriterion; seed: integer);
+  
+/// Возвращает вектор важности признаков.
+/// Важность вычисляется как суммарное уменьшение
+///   нечистоты (impurity reduction) по всем разбиениям.
+/// Значения нормированы так, что сумма равна 1.
+    function FeatureImportances: Vector;
+    
+/// Обучает дерево решений для задачи регрессии.
+///   X — матрица m × n (m объектов, n признаков).
+///   y — вектор длины m с непрерывными значениями.
+///
+/// Примечание:
+///   • обученное состояние дерева НЕ копируется методом Clone
+    function Fit(X: Matrix; y: Vector): ISupervisedModel; virtual; abstract;
+
+/// Выполняет предсказание для матрицы X.
+/// Возвращает вектор прогнозов.
+/// Для регрессии — вещественные значения.
+/// Для классификации — метки классов.
+    function Predict(X: Matrix): Vector; virtual; abstract;
+
+/// Копирует только конфигурацию модели (без обученного состояния).
+/// Используется для создания независимых экземпляров модели.
+    function Clone: IModel; virtual; abstract;
+
+/// Возвращает true, если дерево обучено.
+/// Если false — Predict вызовет ошибку.
+    property IsFitted: boolean read fFitted;
+    
+    function Name: string := Self.GetType.Name;
+  end;
+  
+//============================  
 //   DecisionTreeRegressor  
 //============================  
 /// Дерево решений для задачи регрессии.
@@ -698,6 +707,11 @@ type
   DecisionTreeRegressor = class(DecisionTreeRegressorBase, IRegressor)
   private
     fLeafL2: real;
+    fSortedOrders: array of array of integer;
+    fSortedValues: array of array of real;
+    
+    fVisitMarks: array of integer;
+    fVisitId: integer;
   
     function PredictOne(X: Matrix; rowIndex: integer): real;
   
@@ -706,12 +720,19 @@ type
 /// В регрессии это среднее целевой переменной
 /// с учетом L2-регуляризации (если leafL2 > 0).
     function LeafValue(y: Vector; indices: array of integer): real; override;
+    function BuildTreeNew(X: Matrix; y: Vector; indices: array of integer; depth: integer): DecisionTreeNode;
+    function BuildTreeNode(X: Matrix; y: Vector; nodeOrders: array of array of integer; depth: integer): DecisionTreeNode;
     
-    function FindBestSplitReg(X: Matrix; y: Vector; indices: array of integer): SplitResult;
+    function FindBestSplitReg(X: Matrix; y: Vector; nodeOrders: array of array of integer): RegSplitResult;
+    procedure BuildSortedOrders(X: Matrix; indices: array of integer);
+    function BuildInitialNodeOrders(indices: array of integer): array of array of integer;
+    procedure SplitNodeOrders(X: Matrix; nodeOrders: array of array of integer; feature: integer; threshold: real;
+      var leftOrders, rightOrders: array of array of integer);
+    function BuildMembershipMask(rowCount: integer; indices: array of integer): array of boolean;
+    procedure ComputeNodeStats(yData: array of real; indices: array of integer; var sumAll, sumSqAll: real);
+    function WeightedVariance(n, leftCount: integer; leftSum, leftSumSq, sumAll, sumSqAll: real): real;
+    function GetFeatureSubset(p: integer): array of integer;
     
-/// Ищет лучшее разбиение узла по всем признакам и возможным порогам.
-/// Критерий — максимальное уменьшение дисперсии.
-    function FindBestSplit(X: Matrix; y: Vector; indices: array of integer): SplitResult; override;
 /// Проверяет, является ли узел "чистым".
 /// Для регрессии это означает, что все значения y одинаковы
 /// или разбиение больше не имеет смысла.
@@ -909,7 +930,7 @@ type
 /// Строит ансамбль классификационных деревьев, обученных на  
 ///   bootstrap-подвыборках объектов и случайных подмножествах признаков.
 /// Итоговое предсказание формируется голосованием деревьев или агрегацией вероятностей классов
-  RandomForestClassifier = class(RandomForestBase, IProbabilisticClassifier)
+  RandomForestClassifier = class(RandomForestBase, IProbabilisticClassifier, IClassifierInternal)
   private
     fTrees: array of DecisionTreeCore;
     fIndexToClass: array of integer;
@@ -1178,7 +1199,7 @@ type
 ///   • validation early stopping 
 ///   • OOB early stopping
 ///   • staged prediction
-  GradientBoostingClassifier = class(IProbabilisticClassifier)
+  GradientBoostingClassifier = class(IProbabilisticClassifier, IClassifierInternal)
   private
     // hyperparams
     fNEstimators: integer; 
@@ -1398,7 +1419,7 @@ type
   /// Реализует вероятностные предсказания через PredictProba
   /// ВАЖНО: KNN чувствителен к масштабу признаков.
   /// Всегда используйте StandardScaler или MinMaxScaler в Pipeline перед KNN.
-  KNNClassifier = class(KNNBase, IProbabilisticClassifier)
+  KNNClassifier = class(KNNBase, IProbabilisticClassifier, IClassifierInternal)
   private
     // ==== classification state ====
     fYEnc: array of integer;
@@ -2334,8 +2355,8 @@ const
     'leafL2 должно быть >= 0 ({0}).!!' +
     'leafL2 must be >= 0 ({0}).'; 
   ER_MIN_LEAF_GT_SPLIT =
-    'minSamplesSplit ({1}) должен быть > 2 * minSamplesLeaf ({0}).!!' +
-    'minSamplesSplit ({1}) must be > 2 * minSamplesLeaf ({0}).';
+    'minSamplesSplit ({1}) должен быть >= 2 * minSamplesLeaf ({0}).!!' +
+    'minSamplesSplit ({1}) must be >= 2 * minSamplesLeaf ({0}).';
   ER_OOB_NOT_ENABLED =
     'OOB score не включен для этой модели. Установите computeOOB = true в конструкторе.!!' +
     'OOB score is not enabled for this model. Set computeOOB = true in the constructor.';
@@ -2960,6 +2981,10 @@ begin
     fClassToIndex[unique[i]] := i;
     fIndexToClass[i] := unique[i];
   end;
+  
+  SetLength(fClassLabels, fIndexToClass.Length);
+  for var i := 0 to fIndexToClass.Length - 1 do
+    fClassLabels[i] := fIndexToClass[i].ToString;
 
   // --- init
   fW := new Matrix(p, fClassCount);
@@ -3356,26 +3381,22 @@ begin
   if not fFitted then
     NotFittedError(ER_FIT_NOT_CALLED);
 
-  var P := PredictProba(X);
-
-  var m := P.RowCount;
-  Result := new Vector(m);
-
-  for var i := 0 to m - 1 do
-  begin
-    var internalIdx := P.RowArgMax(i);
-    Result[i] := fIndexToClass[internalIdx];
-  end;
+  var labels := PredictLabels(X);
+  
+  Result := new Vector(labels.Length);
+  
+  for var i := 0 to labels.Length - 1 do
+    Result[i] := fIndexToClass[labels[i]];
 end;
 
 function LogisticRegression.PredictLabels(X: Matrix): array of integer;
 begin
-  var v := Predict(X);
+  var P := PredictProba(X);
   
-  Result := new integer[v.Length];
+  SetLength(Result, P.RowCount);
   
-  for var i := 0 to v.Length - 1 do
-    Result[i] := Round(v[i]);
+  for var i := 0 to P.RowCount - 1 do
+    Result[i] := P.RowArgMax(i);
 end;
 
 function LogisticRegression.ToString: string;
@@ -3707,7 +3728,7 @@ begin
   var bestFeature: integer;
   var bestThreshold: real;
 
-  if not FindBestSplit(X, y, indices, bestFeature, bestThreshold) then
+  if not FindBestSplitCore(X, y, indices, bestFeature, bestThreshold) then
     exit(CreateLeaf(y, indices));
 
   // 4. split → только индексы
@@ -3757,7 +3778,7 @@ begin
 end;
 
 // Новая реализация (O(n log n · p))
-function DecisionTreeCore.FindBestSplit(
+function DecisionTreeCore.FindBestSplitCore(
   X: Matrix;
   y: Vector;
   indices: array of integer;
@@ -3963,62 +3984,6 @@ begin
   fRng := new System.Random(fRandomSeed);
 end;
 
-procedure DecisionTreeRegressorBase.CopyBaseState(dest: DecisionTreeRegressorBase);
-begin
-  dest.fMaxDepth := fMaxDepth;
-  dest.fMinSamplesSplit := fMinSamplesSplit;
-  dest.fMinSamplesLeaf := fMinSamplesLeaf;
-  dest.fFitted := fFitted;
-  dest.fRandomSeed := fRandomSeed;
-  dest.fMaxFeatures := fMaxFeatures;
-  
-  dest.fUserProvidedSeed := fUserProvidedSeed;
-
-  if fUserProvidedSeed then
-    dest.fRng := new System.Random(fRandomSeed)
-  else
-    dest.fRng := new System.Random;
-
-  // MUST be stateless
-  if fCriterion <> nil then
-    dest.fCriterion := fCriterion;
-
-  if fFeatureImportances <> nil then
-    dest.fFeatureImportances := fFeatureImportances.Clone;
-
-  if fRoot <> nil then
-    dest.fRoot := fRoot.Clone;
-
-  if fRowIndices <> nil then
-    dest.fRowIndices := Copy(fRowIndices);
-end;
-
-function DecisionTreeRegressorBase.GetFeatureSubset(nFeatures: integer): array of integer;
-begin
-  if (fMaxFeatures = 0) or (fMaxFeatures >= nFeatures) then
-  begin
-    Result := new integer[nFeatures];
-    for var i := 0 to nFeatures-1 do
-      Result[i] := i;
-    exit;
-  end;
-
-  var all := new List<integer>;
-  for var i := 0 to nFeatures-1 do
-    all.Add(i);
-
-  var subset := new integer[fMaxFeatures];
-
-  for var k := 0 to fMaxFeatures-1 do
-  begin
-    var idx := fRng.Next(all.Count);
-    subset[k] := all[idx];
-    all.RemoveAt(idx);
-  end;
-
-  Result := subset;
-end;
-
 procedure DecisionTreeRegressorBase.SetRowIndices(rows: array of integer);
 begin
   if Length(rows) = 0 then
@@ -4046,54 +4011,52 @@ begin
   Result := n;
 end;
 
-function DecisionTreeRegressorBase.BuildTree(X: Matrix; y: Vector;
+function DecisionTreeRegressor.BuildTreeNew(X: Matrix; y: Vector;
   indices: array of integer; depth: integer): DecisionTreeNode;
 begin
+  var nodeOrders := BuildInitialNodeOrders(indices);
+  Result := BuildTreeNode(X, y, nodeOrders, depth);
+end;
+
+function DecisionTreeRegressor.BuildTreeNode(X: Matrix; y: Vector;
+  nodeOrders: array of array of integer; depth: integer): DecisionTreeNode;
+begin
+  var indices := nodeOrders[0];
+  var n := indices.Length;
+  
   if (fMaxDepth >= 0) and (depth >= fMaxDepth) then
     exit(LeafNode(LeafValue(y, indices)));
 
-  if indices.Length < fMinSamplesSplit then
+  if n < fMinSamplesSplit then
     exit(LeafNode(LeafValue(y, indices)));
 
-  if IsPure(y, indices) then
+  var yData := y.Data;
+  var sumAll, sumSqAll: real;
+  ComputeNodeStats(yData, indices, sumAll, sumSqAll);
+
+  var meanAll := sumAll / n;
+  var parentVar := (sumSqAll / n) - meanAll * meanAll;
+  if parentVar < 0 then
+    parentVar := 0.0;
+
+  if parentVar < 1e-12 then
     exit(LeafNode(LeafValue(y, indices)));
 
-  var parentImp := fCriterion.Impurity(y, indices);
-
-  if double.IsNaN(parentImp) or double.IsInfinity(parentImp) then
-    exit(LeafNode(LeafValue(y, indices)));
-
-  var split := FindBestSplit(X, y, indices);
+  var split := FindBestSplitReg(X, y, nodeOrders);
 
   if not split.Found then
     exit(LeafNode(LeafValue(y, indices)));
 
-  var left := new List<integer>;
-  var right := new List<integer>;
+  var leftOrders, rightOrders: array of array of integer;
+  SplitNodeOrders(X, nodeOrders, split.Feature, split.Threshold, leftOrders, rightOrders);
+  var leftArr := leftOrders[0];
+  var rightArr := rightOrders[0];
 
-  foreach var i in indices do
-    if X[i, split.Feature] <= split.Threshold then
-      left.Add(i)
-    else
-      right.Add(i);
-
-  if (left.Count < fMinSamplesLeaf) or
-     (right.Count < fMinSamplesLeaf) then
+  if (leftArr.Length < fMinSamplesLeaf) or
+     (rightArr.Length < fMinSamplesLeaf) then
     exit(LeafNode(LeafValue(y, indices)));
 
-  var leftArr := left.ToArray;
-  var rightArr := right.ToArray;
-
-  var leftImp := fCriterion.Impurity(y, leftArr);
-  var rightImp := fCriterion.Impurity(y, rightArr);
-
-  var n := indices.Length;
-
-  var weighted :=
-    (real(leftArr.Length) / n) * leftImp +
-    (real(rightArr.Length) / n) * rightImp;
-
-  var delta := parentImp - weighted;
+  var delta := parentVar - split.WeightedScore;
 
   if double.IsNaN(delta) or double.IsInfinity(delta) then
     exit(LeafNode(LeafValue(y, indices)));
@@ -4101,14 +4064,13 @@ begin
   if delta < 0 then
     delta := 0.0;
 
-  // КЛЮЧЕВОЙ PRODUCTION-ФИЛЬТР
   if delta <= 0 then
     exit(LeafNode(LeafValue(y, indices)));
 
   fFeatureImportances[split.Feature] += delta;
 
-  var leftNode := BuildTree(X, y, leftArr, depth + 1);
-  var rightNode := BuildTree(X, y, rightArr, depth + 1);
+  var leftNode := BuildTreeNode(X, y, leftOrders, depth + 1);
+  var rightNode := BuildTreeNode(X, y, rightOrders, depth + 1);
 
   var node := new DecisionTreeNode;
   node.IsLeaf := false;
@@ -4127,123 +4089,295 @@ begin
   Result := fCriterion.Impurity(y, indices) < EPS;
 end;
 
-function DecisionTreeRegressor.FindBestSplitReg(X: Matrix; y: Vector; indices: array of integer): SplitResult;
+function DecisionTreeRegressor.FindBestSplitReg(X: Matrix; y: Vector;
+  nodeOrders: array of array of integer): RegSplitResult;
 begin
+  Result := RegSplitResult.Invalid;
+
+  var indices := nodeOrders[0];
+  var n := indices.Length;
+  if n < 2 then
+    exit;
+
+  var xData := X.Data;
+  var yData := y.Data;
+
+  var sumAll, sumSqAll: real;
+  ComputeNodeStats(yData, indices, sumAll, sumSqAll);
+
   var bestScore := real.PositiveInfinity;
   var bestFeature := -1;
   var bestThreshold := 0.0;
 
-  var n := indices.Length;
-  if n < 2 then
+  var features := GetFeatureSubset(X.ColCount);
+  
+  for var fj := 0 to features.Length - 1 do
   begin
-    Result.Found := false;
-    exit;
-  end;
-
-  // --- parent sums
-  var sumAll := 0.0;
-  var sumSqAll := 0.0;
-
-  for var i := 0 to n-1 do
-  begin
-    var v := y[indices[i]];
-    sumAll += v;
-    sumSqAll += v*v;
-  end;
-
-  var ProcessFeature: integer -> () := j ->
-  begin
-    var pairs: array of (real, integer);
-    SetLength(pairs, n);
-
-    for var i := 0 to n-1 do
-    begin
-      var idx := indices[i];
-      pairs[i] := (X[idx,j], idx);
-    end;
-
-    pairs.Sort(p -> p.Item1);
+    var j := features[fj];
+    var order := nodeOrders[j];
+    var orderLen := order.Length;
 
     var leftCount := 0;
     var leftSum := 0.0;
     var leftSumSq := 0.0;
 
-    for var i := 1 to n-1 do
+    var prevValue := 0.0;
+    var firstIncluded := true;
+
+    for var i := 0 to orderLen - 1 do
     begin
-      var v := y[pairs[i-1].Item2];
+      var idx := order[i];
+      var xCur := xData[idx, j];
+      var yCur := yData[idx];
+
+      if not firstIncluded then
+      begin
+        var rightCount := n - leftCount;
+
+        if (leftCount >= fMinSamplesLeaf) and
+           (rightCount >= fMinSamplesLeaf) and
+           (prevValue <> xCur) then
+        begin
+          var rightCountReal := rightCount;
+          var leftMean := leftSum / leftCount;
+          var leftVar := leftSumSq / leftCount - leftMean * leftMean;
+
+          var rightSum := sumAll - leftSum;
+          var rightSumSq := sumSqAll - leftSumSq;
+          var rightMean := rightSum / rightCount;
+          var rightVar := rightSumSq / rightCount - rightMean * rightMean;
+
+          if leftVar < 0 then
+            leftVar := 0.0;
+          if rightVar < 0 then
+            rightVar := 0.0;
+
+          var weighted := (leftCount * leftVar + rightCountReal * rightVar) / n;
+
+          if weighted < bestScore then
+          begin
+            bestScore := weighted;
+            bestFeature := j;
+            bestThreshold := (prevValue + xCur) * 0.5;
+          end;
+        end;
+      end;
 
       leftCount += 1;
-      leftSum += v;
-      leftSumSq += v*v;
-
-      var rightCount := n - leftCount;
-
-      if (leftCount < fMinSamplesLeaf) or
-         (rightCount < fMinSamplesLeaf) then
-        continue;
-
-      var x1 := pairs[i-1].Item1;
-      var x2 := pairs[i].Item1;
-
-      if x1 = x2 then
-        continue;
-
-      var rightSum := sumAll - leftSum;
-      var rightSumSq := sumSqAll - leftSumSq;
-
-      var leftMean := leftSum / leftCount;
-      var rightMean := rightSum / rightCount;
-
-      var leftVar := (leftSumSq / leftCount) - leftMean*leftMean;
-      var rightVar := (rightSumSq / rightCount) - rightMean*rightMean;
-
-      if leftVar < 0 then leftVar := 0.0;
-      if rightVar < 0 then rightVar := 0.0;
-
-      var weighted :=
-        (real(leftCount) / n) * leftVar +
-        (real(rightCount) / n) * rightVar;
-
-      if double.IsNaN(weighted) or double.IsInfinity(weighted) then
-        continue;
-
-      if weighted < bestScore then
-      begin
-        bestScore := weighted;
-        bestFeature := j;
-        bestThreshold := (x1 + x2) * 0.5;
-      end;
+      leftSum += yCur;
+      leftSumSq += yCur * yCur;
+      prevValue := xCur;
+      firstIncluded := false;
     end;
-  end;
-
-  var p := X.ColCount;
-
-  if (fMaxFeatures <= 0) or (fMaxFeatures >= p) then
-  begin
-    for var j := 0 to p-1 do
-      ProcessFeature(j);
-  end
-  else
-  begin
-    var feat := new integer[p];
-    for var i := 0 to p-1 do
-      feat[i] := i;
-
-    for var i := 0 to fMaxFeatures-1 do
-    begin
-      var r := i + fRng.Next(p - i);
-      var tmp := feat[i];
-      feat[i] := feat[r];
-      feat[r] := tmp;
-    end;
-
-    for var k := 0 to fMaxFeatures-1 do
-      ProcessFeature(feat[k]);
   end;
 
   Result.Found := bestFeature <> -1;
   Result.Feature := bestFeature;
   Result.Threshold := bestThreshold;
+  Result.WeightedScore := bestScore;
+end;
+
+type
+  SortPair = record
+    Value: real;
+    Index: integer;
+  end;
+  SortPairComparer = class(IComparer<SortPair>)
+  public
+    function Compare(a, b: SortPair): integer;
+    begin
+      Result := a.Value.CompareTo(b.Value);
+    end;
+  end;
+
+procedure DecisionTreeRegressor.BuildSortedOrders(X: Matrix; indices: array of integer);
+begin
+  var p := X.ColCount;
+  var n := indices.Length;
+  var xData := X.Data;
+  
+  SetLength(fSortedOrders, p);
+  SetLength(fSortedValues, p);
+  
+  for var j := 0 to p - 1 do
+  begin
+    var pairs: array of SortPair;
+    SetLength(pairs, n);
+    
+    for var i := 0 to n - 1 do
+    begin
+      var idx := indices[i];
+      pairs[i].Value := xData[idx, j];
+      pairs[i].Index := idx;
+    end;
+    
+    System.Array.Sort(pairs,new SortPairComparer);
+    
+    fSortedOrders[j] := new integer[n];
+    fSortedValues[j] := new real[n];
+    
+    for var i := 0 to n - 1 do
+    begin
+      fSortedValues[j][i] := pairs[i].Value;
+      fSortedOrders[j][i] := pairs[i].Index;
+    end;
+  end;
+end;
+
+function DecisionTreeRegressor.BuildInitialNodeOrders(indices: array of integer): array of array of integer;
+begin
+  var maxIdx := -1;
+  for var i := 0 to indices.Length - 1 do
+    if indices[i] > maxIdx then
+      maxIdx := indices[i];
+  
+  var inNode := BuildMembershipMask(maxIdx + 1, indices);
+  SetLength(Result, Length(fSortedOrders));
+  
+  for var j := 0 to Length(fSortedOrders) - 1 do
+  begin
+    var cnt := 0;
+    foreach var idx in fSortedOrders[j] do
+      if inNode[idx] then
+        cnt += 1;
+    
+    Result[j] := new integer[cnt];
+    var k := 0;
+    foreach var idx in fSortedOrders[j] do
+      if inNode[idx] then
+      begin
+        Result[j][k] := idx;
+        k += 1;
+      end;
+  end;
+end;
+
+procedure DecisionTreeRegressor.SplitNodeOrders(X: Matrix;
+  nodeOrders: array of array of integer;
+  feature: integer;
+  threshold: real;
+  var leftOrders, rightOrders: array of array of integer);
+begin
+  var xData := X.Data;
+  var p := Length(nodeOrders);
+  
+  fVisitId += 1;
+  var mark := fVisitId;
+  
+  var splitArr := nodeOrders[feature];
+  var splitLen := splitArr.Length;
+  
+  var leftCount := 0;
+  
+  for var i := 0 to splitLen - 1 do
+  begin
+    var idx := splitArr[i];
+    
+    if xData[idx, feature] <= threshold then
+    begin
+      fVisitMarks[idx] := mark;
+      leftCount += 1;
+    end;
+  end;
+
+  var rightCount := splitLen - leftCount;
+
+  SetLength(leftOrders, p);
+  SetLength(rightOrders, p);
+
+  for var j := 0 to p - 1 do
+  begin
+    var src := nodeOrders[j];
+    var n := src.Length;
+    
+    var left := new integer[leftCount];
+    var right := new integer[rightCount];
+    
+    var li := 0;
+    var ri := 0;
+
+    for var k := 0 to n - 1 do
+    begin
+      var idx := src[k];
+      
+      if fVisitMarks[idx] = mark then
+      begin
+        left[li] := idx;
+        li += 1;
+      end
+      else
+      begin
+        right[ri] := idx;
+        ri += 1;
+      end;
+    end;
+
+    leftOrders[j] := left;
+    rightOrders[j] := right;
+  end;
+end;
+
+function DecisionTreeRegressor.BuildMembershipMask(rowCount: integer; indices: array of integer): array of boolean;
+begin
+  Result := new boolean[rowCount];
+  for var i := 0 to indices.Length - 1 do
+    Result[indices[i]] := true;
+end;
+
+procedure DecisionTreeRegressor.ComputeNodeStats(yData: array of real; indices: array of integer; var sumAll, sumSqAll: real);
+begin
+  sumAll := 0.0;
+  sumSqAll := 0.0;
+
+  for var i := 0 to indices.Length - 1 do
+  begin
+    var v := yData[indices[i]];
+    sumAll += v;
+    sumSqAll += v * v;
+  end;
+end;
+
+function DecisionTreeRegressor.WeightedVariance(n, leftCount: integer; leftSum, leftSumSq, sumAll, sumSqAll: real): real;
+begin
+  var rightCount := n - leftCount;
+  var rightSum := sumAll - leftSum;
+  var rightSumSq := sumSqAll - leftSumSq;
+
+  var leftMean := leftSum / leftCount;
+  var rightMean := rightSum / rightCount;
+
+  var leftVar := (leftSumSq / leftCount) - leftMean * leftMean;
+  var rightVar := (rightSumSq / rightCount) - rightMean * rightMean;
+
+  if leftVar < 0 then leftVar := 0.0;
+  if rightVar < 0 then rightVar := 0.0;
+
+  Result :=
+    (real(leftCount) / n) * leftVar +
+    (real(rightCount) / n) * rightVar;
+end;
+
+function DecisionTreeRegressor.GetFeatureSubset(p: integer): array of integer;
+begin
+  if (fMaxFeatures <= 0) or (fMaxFeatures >= p) then
+  begin
+    Result := Arr(0..p - 1);
+    exit;
+  end;
+
+  Result := new integer[fMaxFeatures];
+  var feat := new integer[p];
+  for var i := 0 to p - 1 do
+    feat[i] := i;
+
+  for var i := 0 to fMaxFeatures - 1 do
+  begin
+    var r := i + fRng.Next(p - i);
+    var tmp := feat[i];
+    feat[i] := feat[r];
+    feat[r] := tmp;
+    Result[i] := feat[i];
+  end;
 end;
 
 //==============================
@@ -4320,6 +4454,9 @@ begin
     fCriterion := new GiniCriterion(classes.Length);
 
   fIndexToClass := classes;
+  SetLength(fClassLabels, fIndexToClass.Length);
+  for var i := 0 to fIndexToClass.Length - 1 do
+    fClassLabels[i] := fIndexToClass[i].ToString;
 
   // --- encoded vector
   var yEncoded := new Vector(yEncArr);
@@ -4330,6 +4467,7 @@ begin
     fMinSamplesSplit,
     fMinSamplesLeaf,
     fCriterion,
+    classes.Length,
     fMaxFeatures,
     fRandomSeed
   );
@@ -4342,6 +4480,16 @@ end;
 
 function DecisionTreeClassifier.Predict(X: Matrix): Vector;
 begin
+  var labels := PredictLabels(X);
+  
+  Result := new Vector(labels.Length);
+  
+  for var i := 0 to labels.Length - 1 do
+    Result[i] := fIndexToClass[labels[i]];
+end;
+
+function DecisionTreeClassifier.PredictLabels(X: Matrix): array of integer;
+begin
   if not fFitted then
     NotFittedError(ER_FIT_NOT_CALLED);
 
@@ -4353,27 +4501,13 @@ begin
 
   if X.ColCount <> fFeatureImportances.Length then
     DimensionError(ER_FEATURE_COUNT_MISMATCH, X.ColCount, fFeatureImportances.Length);
-
+  
   var predIdx := fCore.Predict(X);
-
-  var n := predIdx.Length;
-  Result := new Vector(n);
-
-  for var i := 0 to n - 1 do
-  begin
-    var k := Round(predIdx[i]);
-    Result[i] := fIndexToClass[k];
-  end;
-end;
-
-function DecisionTreeClassifier.PredictLabels(X: Matrix): array of integer;
-begin
-  var v := Predict(X);
   
-  Result := new integer[v.Length];
+  Result := new integer[predIdx.Length];
   
-  for var i := 0 to v.Length - 1 do
-    Result[i] := Round(v[i]);
+  for var i := 0 to predIdx.Length - 1 do
+    Result[i] := Round(predIdx[i]);
 end;
 
 function DecisionTreeClassifier.Clone: IModel;
@@ -4465,11 +4599,6 @@ begin
   Result := value;
 end;
 
-function DecisionTreeRegressor.FindBestSplit(X: Matrix; y: Vector; indices: array of integer): SplitResult; 
-begin
-  Result := FindBestSplitReg(X, y, indices);
-end;
-
 function DecisionTreeRegressor.IsPure(y: Vector; indices: array of integer): boolean;
 begin
   var first := y[indices[0]];
@@ -4508,7 +4637,12 @@ begin
   if indices = nil then
     indices := Arr(0..X.RowCount - 1);
 
-  fRoot := BuildTree(X, y, indices, 0);
+  BuildSortedOrders(X, indices);
+  
+  SetLength(fVisitMarks, X.RowCount);
+  fVisitId := 0;
+
+  fRoot := BuildTreeNew(X, y, indices, 0);
   
   var s := fFeatureImportances.Sum;
   if s > 0 then
@@ -4518,6 +4652,10 @@ begin
   fFitted := true;
   
   fRowIndices := nil;
+  fSortedOrders := nil;
+  fSortedValues := nil;
+  
+  fVisitMarks := nil;
 
   Result := Self;
 end;
@@ -4914,6 +5052,10 @@ begin
 
   var yEncArr := EncodeLabelsInt(yInt, fIndexToClass);
   fClassCount := fIndexToClass.Length;
+  
+  SetLength(fClassLabels, fIndexToClass.Length);
+  for var i := 0 to fIndexToClass.Length - 1 do
+    fClassLabels[i] := fIndexToClass[i].ToString;
 
   if fClassCount < 2 then
     ArgumentError(ER_NEED_AT_LEAST_TWO_CLASSES);
@@ -5017,6 +5159,16 @@ end;
 
 function RandomForestClassifier.Predict(X: Matrix): Vector;
 begin
+  var labels := PredictLabels(X);
+  
+  Result := new Vector(labels.Length);
+  
+  for var i := 0 to labels.Length - 1 do
+    Result[i] := fIndexToClass[labels[i]];
+end;
+
+function RandomForestClassifier.PredictLabels(X: Matrix): array of integer;
+begin
   if not fFitted then
     NotFittedError(ER_FIT_NOT_CALLED);
 
@@ -5028,7 +5180,7 @@ begin
 
   if X.ColCount <> fFeatureCount then
     DimensionError(ER_FEATURE_COUNT_MISMATCH, X.ColCount, fFeatureCount);
-
+  
   var n := X.RowCount;
   var treeCount := fTrees.Length;
 
@@ -5038,19 +5190,17 @@ begin
   if fClassCount <= 0 then
     Error(ER_MODEL_NOT_INITIALIZED);
 
-  var resultVec := new Vector(n);
+  Result := new integer[n];
   var counts := new integer[fClassCount];
-
+  
   for var i := 0 to n - 1 do
   begin
-    // обнуление счётчиков
     for var c := 0 to fClassCount - 1 do
       counts[c] := 0;
 
-    // голосование деревьев
     for var t := 0 to treeCount - 1 do
     begin
-      var cls := fTrees[t].PredictRow(X, i);  // <-- КЛЮЧЕВОЕ изменение
+      var cls := fTrees[t].PredictRow(X, i);
 
       if (cls < 0) or (cls >= fClassCount) then
         ArgumentError(ER_LABEL_INDEX_INVALID);
@@ -5058,7 +5208,6 @@ begin
       counts[cls] += 1;
     end;
 
-    // выбор класса
     var bestClass := 0;
     var bestCount := counts[0];
 
@@ -5069,21 +5218,8 @@ begin
         bestClass := c;
       end;
 
-    // декодирование
-    resultVec[i] := fIndexToClass[bestClass];
+    Result[i] := bestClass;
   end;
-
-  Result := resultVec;
-end;
-
-function RandomForestClassifier.PredictLabels(X: Matrix): array of integer;
-begin
-  var v := Predict(X);
-  
-  Result := new integer[v.Length];
-  
-  for var i := 0 to v.Length - 1 do
-    Result[i] := Round(v[i]);
 end;
 
 function RandomForestClassifier.PredictProba(X: Matrix): Matrix;
@@ -6049,6 +6185,10 @@ begin
   var yEncoded := EncodeLabelsInt(yTrainInt, fClasses);
 
   fClassCount := fClasses.Length;
+  
+  SetLength(fClassLabels, fClasses.Length);
+  for var i := 0 to fClasses.Length - 1 do
+    fClassLabels[i] := fClasses[i].ToString;
 
   if fClassCount < 2 then
     ArgumentError(ER_NEED_AT_LEAST_TWO_CLASSES);
@@ -6793,38 +6933,22 @@ begin
   if not fFitted then
     NotFittedError(ER_FIT_NOT_CALLED);
 
-  var probs := PredictProba(X);
-
-  var nSamples := X.RowCount;
-  var classCount := fClassCount;
-
-  Result := new Vector(nSamples);
-
-  for var i := 0 to nSamples - 1 do
-  begin
-    var bestClassIndex := 0;
-    var bestValue := probs[i, 0];
-
-    for var cls := 1 to classCount - 1 do
-      if probs[i, cls] > bestValue then
-      begin
-        bestValue := probs[i, cls];
-        bestClassIndex := cls;
-      end;
-
-    // возвращаем оригинальную метку
-    Result[i] := fClasses[bestClassIndex];
-  end;
+  var labels := PredictLabels(X);
+  
+  Result := new Vector(labels.Length);
+  
+  for var i := 0 to labels.Length - 1 do
+    Result[i] := fClasses[labels[i]];
 end;
 
 function GradientBoostingClassifier.PredictLabels(X: Matrix): array of integer;
 begin
-  var v := Predict(X);
+  var probs := PredictProba(X);
   
-  Result := new integer[v.Length];
+  SetLength(Result, probs.RowCount);
   
-  for var i := 0 to v.Length - 1 do
-    Result[i] := Round(v[i]);
+  for var i := 0 to probs.RowCount - 1 do
+    Result[i] := probs.RowArgMax(i);
 end;
 
 procedure GradientBoostingClassifier.SetClassLabels(classes: array of string);
@@ -7088,6 +7212,10 @@ begin
   SetLength(fClasses, fClassCount);
   for var i := 0 to fClassCount - 1 do
     fClasses[i] := classesInt[i];
+  
+  SetLength(fClassLabels, fClassCount);
+  for var i := 0 to fClassCount - 1 do
+    fClassLabels[i] := fClasses[i].ToString;
 
   // сохранить encoded y
   SetLength(fYEnc, n);
@@ -7122,6 +7250,16 @@ end;
 
 function KNNClassifier.Predict(X: Matrix): Vector;
 begin
+  var labels := PredictLabels(X);
+  
+  Result := new Vector(labels.Length);
+  
+  for var i := 0 to labels.Length - 1 do
+    Result[i] := fClasses[labels[i]];
+end;
+
+function KNNClassifier.PredictLabels(X: Matrix): array of integer;
+begin
   if not fFitted then
     NotFittedError(ER_FIT_NOT_CALLED);
 
@@ -7137,17 +7275,10 @@ begin
   var trainRows := fXTrain.Data.Rows;
   var testRows  := X.Data.Rows;
 
-  Result := new Vector(m);
+  Result := new integer[m];
 
   for var i := 0 to m - 1 do
   begin
-    // заполнить расстояния
-  //  for var t := 0 to n - 1 do
-  //  begin
-  //    fNeighbors[t].dist := SquaredL2(t, X, i);
-  //    fNeighbors[t].idx := t;
-  //  end;
-    
     var rowTest := testRows[i];
     for var t := 0 to n - 1 do
     begin      
@@ -7165,10 +7296,8 @@ begin
       fNeighbors[t].idx := t;
     end;
 
-    // выбрать k ближайших
     QuickSelect(fK - 1);
 
-    // exact match: если среди k ближайших есть dist=0, возвращаем его класс
     var exactCls := -1;
     for var t := 0 to fK - 1 do
       if fNeighbors[t].dist < KNN_EPS then
@@ -7179,11 +7308,10 @@ begin
 
     if exactCls <> -1 then
     begin
-      Result[i] := fClasses[exactCls];
+      Result[i] := exactCls;
       continue;
     end;
 
-    // voting (stamping)
     fEpoch += 1;
     var touchCount := 0;
 
@@ -7207,7 +7335,6 @@ begin
     end
     else
     begin
-      // weighted: веса 1 / dist (dist = squared distance)
       for var t := 0 to fK - 1 do
       begin
         var trainIdx := fNeighbors[t].idx;
@@ -7224,7 +7351,6 @@ begin
 
         if dist < KNN_EPS then
         begin
-          // считаем как exact match
           exactCls := cls;
           break;
         end
@@ -7238,11 +7364,10 @@ begin
     
     if exactCls <> -1 then
     begin
-      Result[i] := fClasses[exactCls];
+      Result[i] := exactCls;
       continue;
     end;
 
-    // argmax только по touched
     var bestCls := fTouched[0];
     var bestVotes := fVotes[bestCls];
 
@@ -7258,18 +7383,8 @@ begin
       end;
     end;
 
-    Result[i] := fClasses[bestCls];
+    Result[i] := bestCls;
   end;
-end;
-
-function KNNClassifier.PredictLabels(X: Matrix): array of integer;
-begin
-  var v := Predict(X);
-  
-  Result := new integer[v.Length];
-  
-  for var i := 0 to v.Length - 1 do
-    Result[i] := Round(v[i]);
 end;
 
 function KNNClassifier.PredictProba(X: Matrix): Matrix;
@@ -7281,15 +7396,29 @@ begin
 
   var m := X.RowCount;
   var n := fXTrain.RowCount;
+  var p := fXTrain.ColCount;
+  
+  var trainRows := fXTrain.Data.Rows;
+  var testRows := X.Data.Rows;
 
   Result := new Matrix(m, fClassCount); // предполагаем нулевую инициализацию
 
   for var i := 0 to m - 1 do
   begin
     // заполнить расстояния
+    var rowTest := testRows[i];
     for var t := 0 to n - 1 do
     begin
-      fNeighbors[t].dist := SquaredL2(t, X, i);
+      var rowTrain := trainRows[t];
+      var sum := 0.0;
+      
+      for var j := 0 to p - 1 do
+      begin
+        var diff := rowTrain[j] - rowTest[j];
+        sum += diff * diff;
+      end;
+      
+      fNeighbors[t].dist := sum;
       fNeighbors[t].idx := t;
     end;
 
