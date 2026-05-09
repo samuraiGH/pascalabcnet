@@ -22,7 +22,7 @@ city,population,region
   df := imputer.FitTransform(df);
 
   // Кодируем названия регионов числами 0, 1, 2, ...
-  var encoder := new LabelEncoder('region');
+  var encoder := new OrdinalEncoder('region');
   df := encoder.FitTransform(df);
 
   Println('После Imputer и LabelEncoder:');
