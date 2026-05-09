@@ -6,7 +6,7 @@ begin
   df.AddStrColumn('Region', Arr('South', 'North', 'South', 'East'));
   df := df.SetCategorical(['Region']);
 
-  var enc := new LabelEncoder('Region');
+  var enc := new OrdinalEncoder('Region');
   enc.Fit(df);
 
   var res := enc.Transform(df);

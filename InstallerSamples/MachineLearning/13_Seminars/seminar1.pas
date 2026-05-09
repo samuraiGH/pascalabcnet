@@ -11,10 +11,10 @@ begin
   df := imputer.FitTransform(df);
   
   // Кодируем категориальные признаки
-  var encoder := new LabelEncoder('region_name');
+  var encoder := new OrdinalEncoder('region_name');
   df := encoder.FitTransform(df);
   
-  var encoder2 := new LabelEncoder('federal_district');
+  var encoder2 := new OrdinalEncoder('federal_district');
   df := encoder2.FitTransform(df);
   
   df.Print;

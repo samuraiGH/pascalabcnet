@@ -120,7 +120,7 @@ type
   Inspection = InspectionML.Inspection;
   
   IPreprocessor = PreprocessorABC.IPreprocessor;
-  LabelEncoder = PreprocessorABC.LabelEncoder;
+  OrdinalEncoder = PreprocessorABC.OrdinalEncoder;
   OneHotEncoder = PreprocessorABC.OneHotEncoder;
   ImputeStrategy = PreprocessorABC.ImputeStrategy;
   Imputer = PreprocessorABC.Imputer;

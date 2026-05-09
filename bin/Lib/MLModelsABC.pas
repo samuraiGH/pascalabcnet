@@ -25,6 +25,14 @@ unit MLModelsABC;
 // См. статистическую политику в модуле MLABC.
 // =============================================================
 
+{
+  Производительность
+  
+  DecisionTreeRegressor.Fit - 340 мс против 156 мс в Питоне при той же точности
+  GradientBoostingRegressor.Fit - 5500 мс против 5500 мс в Питоне
+  RandomForestRegressor.Fit - 1280 мс против 480 мс в Питоне 
+}
+
 interface
 
 uses MLCoreABC;
@@ -432,6 +440,8 @@ type
     Found: boolean;
     Feature: integer;
     Threshold: real;
+    LeftCount: integer;
+    LeftOrderSize: integer;
     WeightedScore: real;
     
     static function Invalid: RegSplitResult;
@@ -439,6 +449,8 @@ type
       Result.Found := false;
       Result.Feature := -1;
       Result.Threshold := 0.0;
+      Result.LeftCount := 0;
+      Result.LeftOrderSize := 0;
       Result.WeightedScore := real.PositiveInfinity;
     end;
   end;
@@ -708,8 +720,9 @@ type
   private
     fLeafL2: real;
     fSortedOrders: array of array of integer;
-    fSortedValues: array of array of real;
-    
+    fUseSortedOrdersAsRoot: boolean;
+    fRowWeights: array of integer;
+      
     fVisitMarks: array of integer;
     fVisitId: integer;
   
@@ -726,12 +739,14 @@ type
     function FindBestSplitReg(X: Matrix; y: Vector; nodeOrders: array of array of integer): RegSplitResult;
     procedure BuildSortedOrders(X: Matrix; indices: array of integer);
     function BuildInitialNodeOrders(indices: array of integer): array of array of integer;
-    procedure SplitNodeOrders(X: Matrix; nodeOrders: array of array of integer; feature: integer; threshold: real;
+    procedure SplitNodeOrders(nodeOrders: array of array of integer; feature: integer; leftCount, leftOrderSize: integer;
       var leftOrders, rightOrders: array of array of integer);
     function BuildMembershipMask(rowCount: integer; indices: array of integer): array of boolean;
     procedure ComputeNodeStats(yData: array of real; indices: array of integer; var sumAll, sumSqAll: real);
     function WeightedVariance(n, leftCount: integer; leftSum, leftSumSq, sumAll, sumSqAll: real): real;
     function GetFeatureSubset(p: integer): array of integer;
+    function SampleWeight(rowIndex: integer): integer;
+    function TotalWeight(indices: array of integer): integer;
     
 /// Проверяет, является ли узел "чистым".
 /// Для регрессии это означает, что все значения y одинаковы
@@ -758,6 +773,16 @@ type
 /// Выполняет предсказание для всех объектов X.
 /// Возвращает вектор вещественных значений.
     function Predict(X: Matrix): Vector; override;
+    
+/// Внутренний hook для ансамблей: позволяет переиспользовать
+/// уже отсортированные порядки строк по признакам.
+/// Обычному пользовательскому коду не нужен.
+    procedure SetPreSortedOrders(sortedOrders: array of array of integer);
+    
+/// Внутренний hook для bootstrap-подвыборок с повторами.
+/// Передаются уже готовые сортированные порядки именно для корневого узла.
+    procedure SetPreSortedRootOrders(sortedOrders: array of array of integer);
+    procedure SetBootstrapRootOrders(sortedOrders: array of array of integer; rowWeights: array of integer);
 
 /// Копирует только конфигурацию модели (без обученного состояния).
 /// Используется для создания независимых экземпляров модели.
@@ -4022,7 +4047,7 @@ function DecisionTreeRegressor.BuildTreeNode(X: Matrix; y: Vector;
   nodeOrders: array of array of integer; depth: integer): DecisionTreeNode;
 begin
   var indices := nodeOrders[0];
-  var n := indices.Length;
+  var n := TotalWeight(indices);
   
   if (fMaxDepth >= 0) and (depth >= fMaxDepth) then
     exit(LeafNode(LeafValue(y, indices)));
@@ -4048,12 +4073,13 @@ begin
     exit(LeafNode(LeafValue(y, indices)));
 
   var leftOrders, rightOrders: array of array of integer;
-  SplitNodeOrders(X, nodeOrders, split.Feature, split.Threshold, leftOrders, rightOrders);
+  SplitNodeOrders(nodeOrders, split.Feature, split.LeftCount, split.LeftOrderSize, leftOrders, rightOrders);
   var leftArr := leftOrders[0];
   var rightArr := rightOrders[0];
+  var rightCount := n - split.LeftCount;
 
-  if (leftArr.Length < fMinSamplesLeaf) or
-     (rightArr.Length < fMinSamplesLeaf) then
+  if (split.LeftCount < fMinSamplesLeaf) or
+     (rightCount < fMinSamplesLeaf) then
     exit(LeafNode(LeafValue(y, indices)));
 
   var delta := parentVar - split.WeightedScore;
@@ -4095,7 +4121,7 @@ begin
   Result := RegSplitResult.Invalid;
 
   var indices := nodeOrders[0];
-  var n := indices.Length;
+  var n := TotalWeight(indices);
   if n < 2 then
     exit;
 
@@ -4108,6 +4134,11 @@ begin
   var bestScore := real.PositiveInfinity;
   var bestFeature := -1;
   var bestThreshold := 0.0;
+  var bestLeftCount := 0;
+  var bestLeftOrderSize := 0;
+  var invN := 1.0 / n;
+  var minLeaf := fMinSamplesLeaf;
+  var maxLeftCount := n - minLeaf;
 
   var features := GetFeatureSubset(X.ColCount);
   
@@ -4116,64 +4147,62 @@ begin
     var j := features[fj];
     var order := nodeOrders[j];
     var orderLen := order.Length;
+    
+    if orderLen < 2 then
+      continue;
 
-    var leftCount := 0;
-    var leftSum := 0.0;
-    var leftSumSq := 0.0;
+    var firstIdx := order[0];
+    var firstWeight := SampleWeight(firstIdx);
+    var leftCount := firstWeight;
+    var leftSum := firstWeight * yData[firstIdx];
+    var leftSumSq := firstWeight * yData[firstIdx] * yData[firstIdx];
+    var prevValue := xData[firstIdx, j];
 
-    var prevValue := 0.0;
-    var firstIncluded := true;
-
-    for var i := 0 to orderLen - 1 do
+    for var i := 1 to orderLen - 1 do
     begin
+      if leftCount > maxLeftCount then
+        break;
+        
       var idx := order[i];
       var xCur := xData[idx, j];
-      var yCur := yData[idx];
-
-      if not firstIncluded then
+      
+      if (leftCount >= minLeaf) and (prevValue <> xCur) then
       begin
         var rightCount := n - leftCount;
+        var rightSum := sumAll - leftSum;
+        var rightSumSq := sumSqAll - leftSumSq;
+        
+        var leftScore := leftSumSq - (leftSum * leftSum) / leftCount;
+        var rightScore := rightSumSq - (rightSum * rightSum) / rightCount;
+        var weighted := (leftScore + rightScore) * invN;
+        
+        if weighted < 0 then
+          weighted := 0.0;
 
-        if (leftCount >= fMinSamplesLeaf) and
-           (rightCount >= fMinSamplesLeaf) and
-           (prevValue <> xCur) then
+        if weighted < bestScore then
         begin
-          var rightCountReal := rightCount;
-          var leftMean := leftSum / leftCount;
-          var leftVar := leftSumSq / leftCount - leftMean * leftMean;
-
-          var rightSum := sumAll - leftSum;
-          var rightSumSq := sumSqAll - leftSumSq;
-          var rightMean := rightSum / rightCount;
-          var rightVar := rightSumSq / rightCount - rightMean * rightMean;
-
-          if leftVar < 0 then
-            leftVar := 0.0;
-          if rightVar < 0 then
-            rightVar := 0.0;
-
-          var weighted := (leftCount * leftVar + rightCountReal * rightVar) / n;
-
-          if weighted < bestScore then
-          begin
-            bestScore := weighted;
-            bestFeature := j;
-            bestThreshold := (prevValue + xCur) * 0.5;
-          end;
+          bestScore := weighted;
+          bestFeature := j;
+          bestThreshold := (prevValue + xCur) * 0.5;
+          bestLeftCount := leftCount;
+          bestLeftOrderSize := i;
         end;
       end;
 
-      leftCount += 1;
-      leftSum += yCur;
-      leftSumSq += yCur * yCur;
+      var wCur := SampleWeight(idx);
+      var yCur := yData[idx];
+      leftCount += wCur;
+      leftSum += wCur * yCur;
+      leftSumSq += wCur * yCur * yCur;
       prevValue := xCur;
-      firstIncluded := false;
     end;
   end;
 
   Result.Found := bestFeature <> -1;
   Result.Feature := bestFeature;
   Result.Threshold := bestThreshold;
+  Result.LeftCount := bestLeftCount;
+  Result.LeftOrderSize := bestLeftOrderSize;
   Result.WeightedScore := bestScore;
 end;
 
@@ -4190,14 +4219,103 @@ type
     end;
   end;
 
+function BuildPreSortedOrders(X: Matrix): array of array of integer;
+begin
+  var p := X.ColCount;
+  var n := X.RowCount;
+  var xData := X.Data;
+  
+  SetLength(Result, p);
+  
+  for var j := 0 to p - 1 do
+  begin
+    var pairs: array of SortPair;
+    SetLength(pairs, n);
+    
+    for var i := 0 to n - 1 do
+    begin
+      pairs[i].Value := xData[i, j];
+      pairs[i].Index := i;
+    end;
+    
+    System.Array.Sort(pairs, new SortPairComparer);
+    
+    Result[j] := new integer[n];
+    for var i := 0 to n - 1 do
+      Result[j][i] := pairs[i].Index;
+  end;
+end;
+
+function BuildRowCounts(rows: array of integer; rowCount: integer): array of integer;
+begin
+  Result := new integer[rowCount];
+  
+  for var i := 0 to rows.Length - 1 do
+    Result[rows[i]] += 1;
+end;
+
+function BuildSortedOrdersFromCounts(
+  fullSortedOrders: array of array of integer;
+  rowCounts: array of integer
+): array of array of integer;
+begin
+  var p := Length(fullSortedOrders);
+  SetLength(Result, p);
+  
+  var total := 0;
+  for var i := 0 to rowCounts.Length - 1 do
+    total += rowCounts[i];
+  
+  for var j := 0 to p - 1 do
+  begin
+    Result[j] := new integer[total];
+    var k := 0;
+    
+    foreach var idx in fullSortedOrders[j] do
+      for var rep := 1 to rowCounts[idx] do
+      begin
+        Result[j][k] := idx;
+        k += 1;
+      end;
+  end;
+end;
+
+function BuildUniqueOrdersFromCounts(
+  fullSortedOrders: array of array of integer;
+  rowCounts: array of integer
+): array of array of integer;
+begin
+  var p := Length(fullSortedOrders);
+  SetLength(Result, p);
+  
+  var total := 0;
+  for var i := 0 to rowCounts.Length - 1 do
+    if rowCounts[i] > 0 then
+      total += 1;
+  
+  for var j := 0 to p - 1 do
+  begin
+    Result[j] := new integer[total];
+    var k := 0;
+    
+    foreach var idx in fullSortedOrders[j] do
+      if rowCounts[idx] > 0 then
+      begin
+        Result[j][k] := idx;
+        k += 1;
+      end;
+  end;
+end;
+
 procedure DecisionTreeRegressor.BuildSortedOrders(X: Matrix; indices: array of integer);
 begin
+  // Обычный путь для отдельного дерева:
+  // построить сортировку только по реально используемым строкам.
   var p := X.ColCount;
   var n := indices.Length;
   var xData := X.Data;
   
   SetLength(fSortedOrders, p);
-  SetLength(fSortedValues, p);
   
   for var j := 0 to p - 1 do
   begin
@@ -4214,13 +4332,9 @@ begin
     System.Array.Sort(pairs,new SortPairComparer);
     
     fSortedOrders[j] := new integer[n];
-    fSortedValues[j] := new real[n];
     
     for var i := 0 to n - 1 do
-    begin
-      fSortedValues[j][i] := pairs[i].Value;
       fSortedOrders[j][i] := pairs[i].Index;
-    end;
   end;
 end;
 
@@ -4252,13 +4366,13 @@ begin
   end;
 end;
 
-procedure DecisionTreeRegressor.SplitNodeOrders(X: Matrix;
+procedure DecisionTreeRegressor.SplitNodeOrders(
   nodeOrders: array of array of integer;
   feature: integer;
-  threshold: real;
+  leftCount: integer;
+  leftOrderSize: integer;
   var leftOrders, rightOrders: array of array of integer);
 begin
-  var xData := X.Data;
   var p := Length(nodeOrders);
   
   fVisitId += 1;
@@ -4266,31 +4380,33 @@ begin
   
   var splitArr := nodeOrders[feature];
   var splitLen := splitArr.Length;
+  var rightCount := splitLen - leftOrderSize;
+  var markLeft := leftOrderSize <= rightCount;
   
-  var leftCount := 0;
-  
-  for var i := 0 to splitLen - 1 do
-  begin
-    var idx := splitArr[i];
-    
-    if xData[idx, feature] <= threshold then
-    begin
-      fVisitMarks[idx] := mark;
-      leftCount += 1;
-    end;
-  end;
-
-  var rightCount := splitLen - leftCount;
+  if markLeft then
+    for var i := 0 to leftOrderSize - 1 do
+      fVisitMarks[splitArr[i]] := mark
+  else
+    for var i := leftOrderSize to splitLen - 1 do
+      fVisitMarks[splitArr[i]] := mark;
 
   SetLength(leftOrders, p);
   SetLength(rightOrders, p);
 
+  leftOrders[feature] := new integer[leftOrderSize];
+  rightOrders[feature] := new integer[rightCount];
+  System.Array.Copy(splitArr, 0, leftOrders[feature], 0, leftOrderSize);
+  System.Array.Copy(splitArr, leftOrderSize, rightOrders[feature], 0, rightCount);
+
   for var j := 0 to p - 1 do
   begin
+    if j = feature then
+      continue;
+    
     var src := nodeOrders[j];
     var n := src.Length;
     
-    var left := new integer[leftCount];
+    var left := new integer[leftOrderSize];
     var right := new integer[rightCount];
     
     var li := 0;
@@ -4300,15 +4416,31 @@ begin
     begin
       var idx := src[k];
       
-      if fVisitMarks[idx] = mark then
+      if markLeft then
       begin
-        left[li] := idx;
-        li += 1;
+        if fVisitMarks[idx] = mark then
+        begin
+          left[li] := idx;
+          li += 1;
+        end
+        else
+        begin
+          right[ri] := idx;
+          ri += 1;
+        end;
       end
       else
       begin
-        right[ri] := idx;
-        ri += 1;
+        if fVisitMarks[idx] = mark then
+        begin
+          right[ri] := idx;
+          ri += 1;
+        end
+        else
+        begin
+          left[li] := idx;
+          li += 1;
+        end;
       end;
     end;
 
@@ -4331,9 +4463,11 @@ begin
 
   for var i := 0 to indices.Length - 1 do
   begin
-    var v := yData[indices[i]];
-    sumAll += v;
-    sumSqAll += v * v;
+    var idx := indices[i];
+    var w := SampleWeight(idx);
+    var v := yData[idx];
+    sumAll += w * v;
+    sumSqAll += w * v * v;
   end;
 end;
 
@@ -4378,6 +4512,48 @@ begin
     feat[r] := tmp;
     Result[i] := feat[i];
   end;
+end;
+
+procedure DecisionTreeRegressor.SetPreSortedOrders(sortedOrders: array of array of integer);
+begin
+  // Внутренний fast-path для ансамблей:
+  // используем готовую полную сортировку X и затем фильтруем её по fRowIndices.
+  fSortedOrders := sortedOrders;
+  fRowWeights := nil;
+  fUseSortedOrdersAsRoot := false;
+end;
+
+procedure DecisionTreeRegressor.SetPreSortedRootOrders(sortedOrders: array of array of integer);
+begin
+  // Внутренний fast-path для bootstrap-выборок с повторами:
+  // сортировка уже соответствует корневому узлу текущего дерева.
+  fSortedOrders := sortedOrders;
+  fRowWeights := nil;
+  fUseSortedOrdersAsRoot := true;
+end;
+
+procedure DecisionTreeRegressor.SetBootstrapRootOrders(
+  sortedOrders: array of array of integer;
+  rowWeights: array of integer);
+begin
+  fSortedOrders := sortedOrders;
+  fRowWeights := rowWeights;
+  fUseSortedOrdersAsRoot := true;
+end;
+
+function DecisionTreeRegressor.SampleWeight(rowIndex: integer): integer;
+begin
+  if fRowWeights = nil then
+    Result := 1
+  else
+    Result := fRowWeights[rowIndex];
+end;
+
+function DecisionTreeRegressor.TotalWeight(indices: array of integer): integer;
+begin
+  Result := 0;
+  for var i := 0 to indices.Length - 1 do
+    Result += SampleWeight(indices[i]);
 end;
 
 //==============================
@@ -4571,7 +4747,7 @@ end;
 
 function DecisionTreeRegressor.LeafValue(y: Vector; indices: array of integer): real;
 begin
-  var n := indices.Length;
+  var n := TotalWeight(indices);
 
   if n = 0 then
     exit(0.0);  // безопасный fallback, не должен происходить
@@ -4582,7 +4758,7 @@ begin
   var sum := 0.0;
 
   foreach var idx in indices do
-    sum += y[idx];
+    sum += SampleWeight(idx) * y[idx];
 
   var denom: real;
 
@@ -4637,12 +4813,16 @@ begin
   if indices = nil then
     indices := Arr(0..X.RowCount - 1);
 
-  BuildSortedOrders(X, indices);
+  if (fSortedOrders = nil) or (Length(fSortedOrders) = 0) then
+    BuildSortedOrders(X, indices);
   
   SetLength(fVisitMarks, X.RowCount);
   fVisitId := 0;
 
-  fRoot := BuildTreeNew(X, y, indices, 0);
+  if fUseSortedOrdersAsRoot then
+    fRoot := BuildTreeNode(X, y, fSortedOrders, 0)
+  else
+    fRoot := BuildTreeNew(X, y, indices, 0);
   
   var s := fFeatureImportances.Sum;
   if s > 0 then
@@ -4653,7 +4833,8 @@ begin
   
   fRowIndices := nil;
   fSortedOrders := nil;
-  fSortedValues := nil;
+  fUseSortedOrdersAsRoot := false;
+  fRowWeights := nil;
   
   fVisitMarks := nil;
 
@@ -4830,6 +5011,7 @@ begin
   fFeatureCount := p;
 
   SetLength(fTrees, fNTrees);
+  var fullSortedOrders := BuildPreSortedOrders(X);
 
   // --- OOB buffers (regression) ---
   var oobSum: Vector := nil;
@@ -4858,8 +5040,11 @@ begin
 
     var rows: array of integer;
     BootstrapRowIndices(n, rows);
-
-    tree.SetRowIndices(rows);
+    
+    var rowCounts := BuildRowCounts(rows, n);
+    var bootSortedOrders := BuildUniqueOrdersFromCounts(fullSortedOrders, rowCounts);
+    tree.SetBootstrapRootOrders(bootSortedOrders, rowCounts);
+    
     tree.Fit(X, y);
 
     // --- OOB accumulate ---
@@ -5729,6 +5914,9 @@ begin
   var yPredTrain := new Vector(nTrain);
   for var i := 0 to nTrain - 1 do
     yPredTrain[i] := fInitValue;
+  
+  var residuals := new Vector(nTrain);
+  var preSortedOrders := BuildPreSortedOrders(XTrain);
 
   // --- OOB logic ---
   var useSubsample := fSubsample < 1.0;
@@ -5754,8 +5942,7 @@ begin
   for var m := 0 to fNEstimators - 1 do
   begin
     // 1. residuals
-    var r := new Vector(nTrain);
-    ComputePseudoResiduals(yTrain, yPredTrain, r);
+    ComputePseudoResiduals(yTrain, yPredTrain, residuals);
 
     var stageSeed := fRng.Next(integer.MaxValue);
 
@@ -5766,6 +5953,7 @@ begin
       fLeafL2,
       stageSeed
     );
+    tree.SetPreSortedOrders(preSortedOrders);
 
     // --- subsample ---
     var rows: array of integer := nil;
@@ -5784,7 +5972,7 @@ begin
       end;
     end;
     
-    tree.Fit(XTrain, r);
+    tree.Fit(XTrain, residuals);
     fEstimators.Add(tree);
 
     var deltaTrain := tree.Predict(XTrain);

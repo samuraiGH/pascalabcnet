@@ -1157,6 +1157,7 @@ begin
     ArgumentNullError(ER_ARG_NULL, 'name');
 
   var baseDir := PascalABCDirectory + 'Files\Datasets\';
+  //var baseDir := 'C:\Program Files (x86)\PascalABC.NET\Files\Datasets\';
 
   var metaPath := baseDir + name + '.meta';
   var csvPath  := baseDir + name + '.csv';

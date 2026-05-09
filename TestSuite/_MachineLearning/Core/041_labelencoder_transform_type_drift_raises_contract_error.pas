@@ -10,7 +10,7 @@ begin
   testDf.AddIntColumn('City', Arr(1, 2, 3));
   testDf := testDf.SetCategorical(['City']);
 
-  var enc := new LabelEncoder('City');
+  var enc := new OrdinalEncoder('City');
   enc.Fit(trainDf);
 
   CheckRaises(procedure -> begin

@@ -48,14 +48,14 @@ type
 /// Пропущенные значения (NA) игнорируются при обучении
 /// и сохраняются как пропуски при преобразовании.
 /// Работает только со строковыми столбцами и предназначен для признаков.
-/// Не должен применяться к целевому столбцу (target).
-  LabelEncoder = class(IPreprocessor, IColumnBoundStep)
+/// Не должен применяться к целевому столбцу (target)
+  OrdinalEncoder = class(IPreprocessor, IColumnBoundStep)
   private
     col: string;
     mapping: Dictionary<string, integer>;
     fitted: boolean;
   public
-    /// Создаёт LabelEncoder для указанного столбца
+    /// Создаёт OrdinalEncoder для указанного столбца
     constructor Create(column: string);
   
 /// Определяет множество категорий столбца и сохраняет их числовое кодирование.
@@ -66,8 +66,10 @@ type
 ///   • отображение категорий НЕ копируется методом Clone    
     function Fit(df: DataFrame): IPreprocessor;
     
-    /// Заменяет категории их числовыми кодами
-    /// Возвращает новый DataFrame
+    /// Заменяет категории их числовыми кодами.
+    /// Неизвестные категории кодируются значением -1.
+    /// Пропущенные значения сохраняются как пропуски.
+    /// Возвращает новый DataFrame.
     function Transform(df: DataFrame): DataFrame;
     
     /// Выполняет Fit и Transform последовательно
@@ -174,14 +176,14 @@ implementation
 uses MLExceptions;
 
 const
-  ER_LABELENCODER_NO_COLUMN =
-    'LabelEncoder: столбец не указан!!LabelEncoder: column not specified';
-  ER_LABELENCODER_NOT_STRING =
-    'LabelEncoder: столбец "{0}" не является строковым!!' +
-    'LabelEncoder: column "{0}" is not string';
-  ER_LABELENCODER_UNSEEN_CATEGORY =
-    'LabelEncoder: неизвестная категория "{0}"!!' +
-    'LabelEncoder: unseen category "{0}"';
+  ER_ORDINALENCODER_NO_COLUMN =
+    'OrdinalEncoder: столбец не указан!!OrdinalEncoder: column not specified';
+  ER_ORDINALENCODER_NOT_STRING =
+    'OrdinalEncoder: столбец "{0}" не является строковым!!' +
+    'OrdinalEncoder: column "{0}" is not string';
+  ER_ORDINALENCODER_UNSEEN_CATEGORY =
+    'OrdinalEncoder: неизвестная категория "{0}"!!' +
+    'OrdinalEncoder: unseen category "{0}"';
   ER_ONEHOT_NO_COLUMN =
     'OneHotEncoder: столбец не указан!!OneHotEncoder: column not specified';
   ER_ONEHOT_NOT_STRING =
@@ -229,19 +231,19 @@ const
     
   
 //-----------------------------
-//        LabelEncoder
+//        OrdinalEncoder
 //-----------------------------
 
-constructor LabelEncoder.Create(column: string);
+constructor OrdinalEncoder.Create(column: string);
 begin
   if column = '' then
-    ArgumentError(ER_LABELENCODER_NO_COLUMN);
+    ArgumentError(ER_ORDINALENCODER_NO_COLUMN);
 
   col := column;
   fitted := false;
 end;
 
-function LabelEncoder.Fit(df: DataFrame): IPreprocessor;
+function OrdinalEncoder.Fit(df: DataFrame): IPreprocessor;
 begin
   if df = nil then
     ArgumentNullError(ER_ARG_NULL, 'df');
@@ -252,7 +254,7 @@ begin
   var idx := df.Schema.IndexOf(col);
 
   if df.Schema.ColumnTypeAt(idx) <> ColumnType.ctStr then
-    Error(ER_LABELENCODER_NOT_STRING, col);
+    Error(ER_ORDINALENCODER_NOT_STRING, col);
 
   mapping := new Dictionary<string, integer>;
 
@@ -275,7 +277,7 @@ begin
   Result := Self;
 end;
 
-function LabelEncoder.Transform(df: DataFrame): DataFrame;
+function OrdinalEncoder.Transform(df: DataFrame): DataFrame;
 begin
   if not fitted then
     NotFittedError(ER_FIT_NOT_CALLED);
@@ -299,10 +301,11 @@ begin
     begin
       var s := cur.Str(idx);
 
-      if not mapping.ContainsKey(s) then
-        Error(ER_LABELENCODER_UNSEEN_CATEGORY, s);
-
-      data[row] := mapping[s];
+      if s not in mapping then
+        data[row] := -1
+      else
+        data[row] := mapping[s];
+      
       valid[row] := True;
     end;
 
@@ -328,20 +331,20 @@ begin
   Result := res.SetCategorical(catCols.ToArray);
 end;
 
-function LabelEncoder.FitTransform(df: DataFrame): DataFrame;
+function OrdinalEncoder.FitTransform(df: DataFrame): DataFrame;
 begin
   Fit(df);
   Result := Transform(df);
 end;
 
-function LabelEncoder.ToString: string;
+function OrdinalEncoder.ToString: string;
 begin
-  Result := 'LabelEncoder(' + col + ')';
+  Result := 'OrdinalEncoder(' + col + ')';
 end;
 
-function LabelEncoder.Clone: IPreprocessor;
+function OrdinalEncoder.Clone: IPreprocessor;
 begin
-  Result := new LabelEncoder(col);
+  Result := new OrdinalEncoder(col);
 end;
 
 procedure AppendAllColumnsExcept(

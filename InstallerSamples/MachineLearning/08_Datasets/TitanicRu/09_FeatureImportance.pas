@@ -10,10 +10,10 @@ begin
   var portImputer := new Imputer('Саутгемптон', ['ПортПосадки']);
   df := portImputer.FitTransform(df);
 
-  var sexEncoder := new LabelEncoder('Пол');
+  var sexEncoder := new OrdinalEncoder('Пол');
   df := sexEncoder.FitTransform(df);
 
-  var portEncoder := new LabelEncoder('ПортПосадки');
+  var portEncoder := new OrdinalEncoder('ПортПосадки');
   df := portEncoder.FitTransform(df);
 
   var features := ['Класс', 'Пол', 'Возраст', 'БратьяИСупруги', 'РодителиИДети', 'ЦенаБилета', 'ПортПосадки'];
