@@ -244,6 +244,8 @@ type
 
     procedure EnsureBinary;
 
+    function GetMatrix: array[,] of integer;
+
     function GetTPBinary: integer;
     function GetFPBinary: integer;
     function GetFNBinary: integer;
@@ -292,6 +294,11 @@ type
     ///
     /// Используется для построения матрицы ошибок размера K × K, где K = ClassCount.
     property ClassCount: integer read fClassCount;  
+
+    /// Матрица ошибок.
+    ///
+    /// Matrix[i, j] — количество объектов класса i, которые модель предсказала как класс j.
+    property Matrix: array[,] of integer read GetMatrix;
     
     /// Число истинно положительных предсказаний для класса c.
     /// Здесь c — номер класса в матрице ошибок.
@@ -1999,6 +2006,15 @@ begin
 
     fMatrix[row, col] += 1;
   end;
+end;
+
+function ConfusionMatrix.GetMatrix: array[,] of integer;
+begin
+  Result := new integer[fClassCount, fClassCount];
+
+  for var i := 0 to fClassCount - 1 do
+    for var j := 0 to fClassCount - 1 do
+      Result[i, j] := fMatrix[i, j];
 end;
 
 function ConfusionMatrix.GetLabel(c: integer): integer;

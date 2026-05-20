@@ -21,6 +21,7 @@ type
   private
     function ValueLabel(feature, value: string): string;
     function CloneMeta(df: DataFrame): Dataset;
+    function GetCategoricalFeatures: array of string;
   public
     FeatureLabels: Dictionary<string,string>;
     ValueLabels: Dictionary<string,Dictionary<string,string>>;
@@ -65,8 +66,32 @@ type
     function RowCount: integer := Data.RowCount;
     
     function GetFeatureColumns: array of string;
+    property CategoricalFeatures: array of string read GetCategoricalFeatures;
     
     function HasTarget: boolean;
+  end;
+
+  /// Кодирует target-колонку классификационного Dataset в числовой Vector.
+  /// Используется только для целевой переменной, не для признаков.
+  LabelEncoder = class
+  private
+    fClasses: array of string;
+    fClassToIndex: Dictionary<string, integer>;
+    
+    function GetClasses: array of string;
+    procedure EnsureFitted;
+    procedure CheckDataset(ds: Dataset);
+    function TargetLabels(ds: Dataset): array of string;
+  public
+    function Fit(ds: Dataset): LabelEncoder;
+    function Transform(ds: Dataset): Vector;
+    function FitTransform(ds: Dataset): Vector;
+    
+    property Classes: array of string read GetClasses;
+    
+    function ClassName(index: integer): string;
+    function ClassIndex(name: string): integer;
+    function Decode(y: Vector): array of string;
   end;
 
   /// Набор генераторов и загрузчиков датасетов для задач машинного обучения.
@@ -263,6 +288,10 @@ type
 
     /// Датасет пассажиров Титаника (задача классификации)
     static function TitanicRu: Dataset;
+
+    /// Датасет цен на автомобили с пробегом (задача регрессии)
+    static function UsedCarsPrice: Dataset;
+
     
     {/// Датасет результатов экзамена студентов (классификация)
     static function StudentExam: Dataset;
@@ -340,6 +369,13 @@ const
   ER_ENCODELABELS_UNSUPPORTED_TYPE =
     'Неподдерживаемый тип столбца для кодирования меток: {0}!!' +
     'Unsupported column type for label encoding: {0}';  
+  ER_LABEL_ENCODER_NOT_FITTED =
+    'LabelEncoder не обучен. Сначала вызовите Fit или FitTransform.!!' +
+    'LabelEncoder is not fitted. Call Fit or FitTransform first.';
+  ER_LABEL_ENCODER_UNKNOWN_CLASS =
+    'Неизвестная метка класса: {0}!!Unknown class label: {0}';
+  ER_LABEL_ENCODER_INDEX_OUT_OF_RANGE =
+    'Индекс класса вне диапазона: {0}!!Class index out of range: {0}';
   
   C_DATASET      = 'Датасет: {0}!!Dataset: {0}';
   C_DESCRIPTION  = 'Описание:!!Description:';
@@ -352,6 +388,7 @@ const
   C_URL          = 'Ссылка: {0}!!URL: {0}';
   C_CLASSES      = 'Классов: {0}!!Classes: {0}';
   C_FEATURE_LIST = 'Признаки:!!Features:';
+  C_CATEGORICAL  = 'Категориальные признаки: {0}!!Categorical features: {0}';
     
 function Normal(rnd: System.Random): real;
 begin
@@ -509,6 +546,9 @@ begin
   if (Target <> nil) and (Target <> '') then
     PrintlnTr(C_TARGET, Target);
 
+  if CategoricalFeatures.Length > 0 then
+    PrintlnTr(C_CATEGORICAL, CategoricalFeatures.JoinToString(', '));
+
   Println;
 
   var maxLen := Features.Max(f -> f.Length);
@@ -604,9 +644,150 @@ begin
     Result := Data.Schema.ColumnNames;
 end;
 
+function Dataset.GetCategoricalFeatures: array of string;
+begin
+  Result := Features
+    .Where(f -> Data.IsCategorical(f))
+    .ToArray;
+end;
+
 function Dataset.HasTarget: boolean;
 begin
   Result := (Target <> nil) and (Target <> '');
+end;
+
+
+//-----------------------------
+//        LabelEncoder
+//-----------------------------
+
+function LabelEncoder.GetClasses: array of string;
+begin
+  EnsureFitted;
+  Result := Copy(fClasses);
+end;
+
+procedure LabelEncoder.EnsureFitted;
+begin
+  if (fClasses = nil) or (fClassToIndex = nil) then
+    Error(ER_LABEL_ENCODER_NOT_FITTED);
+end;
+
+procedure LabelEncoder.CheckDataset(ds: Dataset);
+begin
+  if ds = nil then
+    ArgumentNullError(ER_ARG_NULL, 'ds');
+
+  if ds.Data = nil then
+    ArgumentNullError(ER_ARG_NULL, 'Data');
+
+  if ds.Task <> TaskType.Classification then
+    ArgumentError(ER_CLASSES_ONLY_CLASSIFICATION);
+
+  if not ds.HasTarget then
+    ArgumentError(ER_DATASET_TARGET_MISSING);
+
+  if not ds.Data.HasColumn(ds.Target) then
+    ArgumentError(ER_DATASET_TARGET_NOT_FOUND, ds.Target);
+end;
+
+function LabelEncoder.TargetLabels(ds: Dataset): array of string;
+begin
+  CheckDataset(ds);
+
+  case ds.Data.GetColumnType(ds.Target) of
+    ColumnType.ctStr:
+      Result := ds.Data.GetStrColumn(ds.Target);
+    ColumnType.ctInt:
+      Result := ds.Data.GetIntColumn(ds.Target).Select(x -> x.ToString).ToArray;
+    else
+      ArgumentError(ER_ENCODELABELS_UNSUPPORTED_TYPE, ds.Target);
+  end;
+end;
+
+function LabelEncoder.Fit(ds: Dataset): LabelEncoder;
+begin
+  var labels := TargetLabels(ds);
+  
+  var classes := new List<string>;
+  fClassToIndex := new Dictionary<string, integer>;
+
+  foreach var labelName in labels do
+    if not fClassToIndex.ContainsKey(labelName) then
+    begin
+      fClassToIndex[labelName] := classes.Count;
+      classes.Add(labelName);
+    end;
+
+  fClasses := classes.ToArray;
+  Result := self;
+end;
+
+function LabelEncoder.Transform(ds: Dataset): Vector;
+begin
+  EnsureFitted;
+
+  var labels := TargetLabels(ds);
+  var y := new integer[labels.Length];
+
+  for var i := 0 to labels.Length - 1 do
+  begin
+    var labelName := labels[i];
+
+    if not fClassToIndex.ContainsKey(labelName) then
+      ArgumentError(ER_LABEL_ENCODER_UNKNOWN_CLASS, labelName);
+
+    y[i] := fClassToIndex[labelName];
+  end;
+
+  Result := new Vector(y);
+end;
+
+function LabelEncoder.FitTransform(ds: Dataset): Vector;
+begin
+  Fit(ds);
+  Result := Transform(ds);
+end;
+
+function LabelEncoder.ClassName(index: integer): string;
+begin
+  EnsureFitted;
+
+  if (index < 0) or (index >= fClasses.Length) then
+    ArgumentError(ER_LABEL_ENCODER_INDEX_OUT_OF_RANGE, index);
+
+  Result := fClasses[index];
+end;
+
+function LabelEncoder.ClassIndex(name: string): integer;
+begin
+  EnsureFitted;
+
+  if not fClassToIndex.ContainsKey(name) then
+    ArgumentError(ER_LABEL_ENCODER_UNKNOWN_CLASS, name);
+
+  Result := fClassToIndex[name];
+end;
+
+function LabelEncoder.Decode(y: Vector): array of string;
+begin
+  EnsureFitted;
+
+  if y = nil then
+    ArgumentNullError(ER_ARG_NULL, 'y');
+
+  Result := new string[y.Length];
+
+  for var i := 0 to y.Length - 1 do
+  begin
+    var value := y.Data[i];
+    var index := Round(value);
+
+    if (Abs(value - index) > 1e-12) or (index < 0) or (index >= fClasses.Length) then
+      ArgumentError(ER_LABEL_ENCODER_INDEX_OUT_OF_RANGE, index);
+
+    Result[i] := fClasses[index];
+  end;
 end;
 
 
@@ -1174,6 +1355,18 @@ begin
     ArgumentError(ER_DATASET_TASK_MISSING, name);
 
   var df := DataFrame.FromCsv(csvPath);
+  var categoricalCols := new List<string>;
+
+  foreach var k in meta.Keys do
+    if k.StartsWith('feature.') and not k.EndsWith('.ru') and not k.EndsWith('.en') then
+    begin
+      var colName := k.Substring('feature.'.Length);
+      if (meta[k] = 'categorical') and df.HasColumn(colName) then
+        categoricalCols.Add(colName);
+    end;
+
+  if categoricalCols.Count > 0 then
+    df := df.SetCategorical(categoricalCols.ToArray);
 
   var ds := new Dataset;
 
@@ -1255,50 +1448,27 @@ end;
 
 static function Datasets.Iris: Dataset;
 begin
-  var ds := Load('Iris');
-
-  ds.Data := ds.Data.SetCategorical([
-    'species'
-  ]);
-
-  Result := ds;
+  Result := Load('Iris');
 end;
 
 static function Datasets.MoscowHousing: Dataset;
 begin
-  var ds := Load('moscow_housing');
-
-  ds.Data := ds.Data.SetCategorical([
-    'renovation'
-  ]);
-
-  Result := ds;
+  Result := Load('moscow_housing');
 end;
 
 static function Datasets.RussianCities: Dataset;
 begin
-  var ds := Load('russian_cities');
-
-  ds.Data := ds.Data.SetCategorical([
-    'region_name',
-    'federal_district'
-  ]);
-
-  Result := ds;
+  Result := Load('russian_cities');
 end;
 
 static function Datasets.TitanicRu: Dataset;
 begin
-  var ds := Load('titanic_ru');
+  Result := Load('titanic_ru');
+end;
 
-  ds.Data := ds.Data.SetCategorical([
-    'Выжил',
-    'Класс',
-    'Пол',
-    'ПортПосадки'
-  ]);
-
-  Result := ds;
+static function Datasets.UsedCarsPrice: Dataset;
+begin
+  Result := Load('used_cars_price');
 end;
 
 {static function Datasets.StudentExam: Dataset;

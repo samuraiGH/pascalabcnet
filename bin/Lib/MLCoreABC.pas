@@ -158,6 +158,7 @@ type
     /// как признаков X, так и целевой переменной y.
     /// Запоминает необходимые параметры, которые будут использоваться при Transform.
     function Fit(X: Matrix; y: Vector): ISupervisedTransformer;
+    function FitTransform(X: Matrix; y: Vector): Matrix;
   end;
   
   /// Интерфейс преобразования признаков без учёта целевой переменной.
@@ -167,6 +168,7 @@ type
     /// Обучает преобразование на данных с использованием признаков X
     /// Запоминает необходимые параметры, которые будут использоваться при Transform.
     function Fit(X: Matrix): IUnsupervisedTransformer;
+    function FitTransform(X: Matrix): Matrix;
   end;
   
   IColumnExpander = interface

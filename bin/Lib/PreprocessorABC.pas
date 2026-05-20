@@ -445,6 +445,8 @@ begin
   var srcIdx := df.Schema.IndexOf(col);
   if srcIdx < 0 then
     ArgumentError(ER_COLUMN_NOT_FOUND, col);
+  if df.Schema.ColumnTypeAt(srcIdx) <> ColumnType.ctStr then
+    Error(ER_ONEHOT_NOT_STRING, col);
   
   var rowCount := df.RowCount;
   var catCount := categories.Length;

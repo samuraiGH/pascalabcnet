@@ -71,6 +71,7 @@ type
   DataFrame = DataFrameABC.DataFrame;
   DataFrameCursor = DataFrameABCCore.DataFrameCursor;
   ColumnType = DataFrameABCCore.ColumnType;
+  Column = DataFrameABCCore.Column;
   
   Statistics = DataFrameABC.Statistics;
   CsvLoader = DataFrameABC.CsvLoader;
@@ -127,6 +128,7 @@ type
   
   Datasets = MLDatasets.Datasets;
   Dataset = MLDatasets.Dataset;
+  LabelEncoder = MLDatasets.LabelEncoder;
   
   IModel = MLCoreABC.IModel;
   ISupervisedModel = MLCoreABC.ISupervisedModel;

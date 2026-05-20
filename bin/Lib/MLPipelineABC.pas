@@ -96,6 +96,18 @@ type
       features: array of string;
       params steps: array of IPipelineStep
     ): DataPipeline;
+
+    /// Строит только preprocessing-часть supervised-конвейера без модели.
+    /// Модель затем можно присоединить методом WithModel
+    static function BuildPreprocessing(
+      task: TaskKind;
+      target: string;
+      features: array of string;
+      params steps: array of IPipelineStep
+    ): DataPipeline;
+
+    /// Возвращает копию текущего preprocessing-конвейера с добавленной моделью.
+    function WithModel(model: ISupervisedModel): DataPipeline;
       
     /// Обучает конвейер на DataFrame.
     /// Семантика:
@@ -185,6 +197,13 @@ type
     /// Строит unsupervised-конвейер из шагов обработки данных и модели.
     static function Build(features: array of string;
       params steps: array of IPipelineStep): UDataPipeline;
+
+    /// Строит только preprocessing-часть unsupervised-конвейера без модели.
+    static function BuildPreprocessing(features: array of string;
+      params steps: array of IPipelineStep): UDataPipeline;
+
+    /// Возвращает копию текущего preprocessing-конвейера с добавленной моделью.
+    function WithModel(model: IUnsupervisedModel): UDataPipeline;
   
     /// Обучает конвейер на DataFrame.
     function Fit(df: DataFrame): UDataPipeline;
@@ -299,10 +318,13 @@ const
     'Метки классов недоступны. Убедитесь, что конвейер обучен и задача — классификация!!Class labels are not available. Ensure the pipeline is fitted and the task is classification';  
   ER_LABEL_INDEX_OUT_OF_RANGE =
     'Индекс метки {0} вне диапазона [0, {1})!!Label index {0} is out of range [0, {1})';
-  ER_LABELENCODER_TARGET_NOT_ALLOWED =
-    'LabelEncoder нельзя применять к целевой переменной — кодирование выполняется внутри модели!!LabelEncoder cannot be applied to target — encoding is handled internally by the model';
+  ER_ORDINALENCODER_TARGET_NOT_ALLOWED =
+    'OrdinalEncoder нельзя применять к целевой переменной — кодирование выполняется внутри модели!!OrdinalEncoder cannot be applied to target — encoding is handled internally by the model';
   ER_ENCODELABELS_NOT_CATEGORICAL =
     'Целевой столбец должен быть категориальным для задач классификации!!Target column must be categorical for classification tasks';
+  ER_CLASSIFICATION_TARGET_MUST_BE_CATEGORICAL_STR_OR_INT =
+    'Целевой столбец "{0}" должен быть категориальным строковым или целочисленным для задач классификации!!' +
+    'Target column "{0}" must be a categorical string or integer column for classification tasks';
   ER_REGRESSION_TARGET_MUST_BE_NUMERIC =
     'Целевой столбец "{0}" должен быть числовым для задач регрессии!!Target column "{0}" must be numeric for regression tasks';
   ER_PREPROCESSOR_ROWCOUNT_CHANGED =
@@ -557,10 +579,10 @@ begin
   Result := Self;
 end;
 
-class function DataPipeline.Build(
+class function DataPipeline.BuildPreprocessing(
   task: TaskKind;
   target: string;
-  features: array of string; 
+  features: array of string;
   params steps: array of IPipelineStep
 ): DataPipeline;
 begin
@@ -576,6 +598,38 @@ begin
     if f = target then
       ArgumentError(ER_DATAPIPE_TARGET_IN_FEATURES, target);
 
+  if (steps = nil) or (Length(steps) = 0) then
+    ArgumentError(ER_PIPELINE_NO_STEPS);
+
+  for var i := 0 to High(steps) do
+  begin
+    var step := steps[i];
+
+    if step = nil then
+      ArgumentError(ER_PIPELINE_STEP_NULL, i);
+
+    if step is ISupervisedModel then
+      ArgumentError(ER_PIPELINE_INVALID_STEP_ORDER);
+  end;
+
+  var p := new DataPipeline;
+  p.fTarget := target;
+  p.fFeatures := Copy(features);
+  p.fTask := task;
+
+  for var i := 0 to High(steps) do
+    p.Add(steps[i]);
+
+  Result := p;
+end;
+
+class function DataPipeline.Build(
+  task: TaskKind;
+  target: string;
+  features: array of string; 
+  params steps: array of IPipelineStep
+): DataPipeline;
+begin
   if (steps = nil) or (Length(steps) = 0) then
     ArgumentError(ER_PIPELINE_NO_STEPS);
 
@@ -611,14 +665,32 @@ begin
       ArgumentError(ER_PIPELINE_INVALID_STEP_ORDER);
   end;
 
-  var p := new DataPipeline;
-  p.fTarget := target;
-  p.fFeatures := Copy(features);
-  p.fTask := task;
+  var prepSteps := new IPipelineStep[steps.Length - 1];
+  for var i := 0 to High(prepSteps) do
+    prepSteps[i] := steps[i];
 
-  for var i := 0 to High(steps) do
-    p.Add(steps[i]);
+  Result :=
+    BuildPreprocessing(task, target, features, prepSteps)
+      .WithModel(last as ISupervisedModel);
+end;
 
+function DataPipeline.WithModel(model: ISupervisedModel): DataPipeline;
+begin
+  if model = nil then
+    ArgumentError(ER_MODEL_NULL);
+
+  var p := Clone as DataPipeline;
+
+  if p = nil then
+    Error(ER_MODEL_CLONE_TYPE);
+
+  if p.fFitted then
+    Error(ER_PIPELINE_MODIFY_AFTER_FIT);
+
+  if p.fModel <> nil then
+    ArgumentError(ER_PIPELINE_MULTIPLE_MODELS);
+
+  p.Add(model as IPipelineStep);
   Result := p;
 end;
 
@@ -790,8 +862,13 @@ begin
   
   case fTask of
     tkClassification:
-      if not df.IsCategorical(fTarget) then
-        ArgumentError(ER_ENCODELABELS_NOT_CATEGORICAL, fTarget);
+      begin
+        if not df.IsCategorical(fTarget) then
+          ArgumentError(ER_ENCODELABELS_NOT_CATEGORICAL, fTarget);
+        var ct := df.GetColumnType(fTarget);
+        if not (ct in [ColumnType.ctStr, ColumnType.ctInt]) then
+          ArgumentError(ER_CLASSIFICATION_TARGET_MUST_BE_CATEGORICAL_STR_OR_INT, fTarget);
+      end;
 
     tkRegression:
       begin
@@ -923,11 +1000,37 @@ begin
   Result := Self;
 end;
 
-class function UDataPipeline.Build(features: array of string;
+class function UDataPipeline.BuildPreprocessing(features: array of string;
   params steps: array of IPipelineStep): UDataPipeline;
 begin
   ValidateFeatureList(features);
 
+  if (steps = nil) or (Length(steps) = 0) then
+    ArgumentError(ER_PIPELINE_NO_STEPS);
+
+  for var i := 0 to High(steps) do
+  begin
+    var step := steps[i];
+
+    if step = nil then
+      ArgumentError(ER_PIPELINE_STEP_NULL, i);
+
+    if step is IUnsupervisedModel then
+      ArgumentError(ER_PIPELINE_INVALID_STEP_ORDER);
+  end;
+
+  var p := new UDataPipeline;
+  p.fFeatures := Copy(features);
+
+  for var i := 0 to High(steps) do
+    p.Add(steps[i]);
+
+  Result := p;
+end;
+
+class function UDataPipeline.Build(features: array of string;
+  params steps: array of IPipelineStep): UDataPipeline;
+begin
   if (steps = nil) or (Length(steps) = 0) then
     ArgumentError(ER_PIPELINE_NO_STEPS);
 
@@ -950,12 +1053,32 @@ begin
       ArgumentError(ER_PIPELINE_INVALID_STEP_ORDER);
   end;
 
-  var p := new UDataPipeline;
-  p.fFeatures := Copy(features);
+  var prepSteps := new IPipelineStep[steps.Length - 1];
+  for var i := 0 to High(prepSteps) do
+    prepSteps[i] := steps[i];
 
-  for var i := 0 to High(steps) do
-    p.Add(steps[i]);
+  Result :=
+    BuildPreprocessing(features, prepSteps)
+      .WithModel(last as IUnsupervisedModel);
+end;
 
+function UDataPipeline.WithModel(model: IUnsupervisedModel): UDataPipeline;
+begin
+  if model = nil then
+    ArgumentError(ER_MODEL_NULL);
+
+  var p := Clone as UDataPipeline;
+
+  if p = nil then
+    Error(ER_INVALID_MODEL_TYPE, 'UDataPipeline');
+
+  if p.fFitted then
+    Error(ER_PIPELINE_MODIFY_AFTER_FIT);
+
+  if p.fModel <> nil then
+    ArgumentError(ER_PIPELINE_MULTIPLE_MODELS);
+
+  p.Add(model as IPipelineStep);
   Result := p;
 end;
 

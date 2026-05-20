@@ -1735,7 +1735,7 @@ type
     // В отличие от этого, DataPipeline.Build используется,
     // когда исходные данные представлены в виде DataFrame
     // и требуется выполнить препроцессинг таблицы
-    // (Imputer, OneHotEncoder, LabelEncoder и др.)
+    // (Imputer, OneHotEncoder, OrdinalEncoder и др.)
     // перед преобразованием данных в Matrix/Vector.
     
     var pipe1 :=
@@ -1932,6 +1932,9 @@ type
 /// Примечание:
 ///   • вычисленные параметры НЕ копируются методом Clone
     function Fit(X: Matrix): IUnsupervisedTransformer;
+    
+    /// Последовательно выполняет Fit и Transform на одних и тех же данных.
+    function FitTransform(X: Matrix): Matrix;
   
     /// Применяет стандартизацию к данным.
     function Transform(X: Matrix): Matrix;
@@ -1978,6 +1981,9 @@ type
 /// Примечание:
 ///   • вычисленные параметры НЕ копируются методом Clone
     function Fit(X: Matrix): IUnsupervisedTransformer;
+    
+    /// Последовательно выполняет Fit и Transform на одних и тех же данных.
+    function FitTransform(X: Matrix): Matrix;
   
     /// Применяет линейное масштабирование признаков к диапазону [0, 1].
     function Transform(X: Matrix): Matrix;
@@ -2027,6 +2033,9 @@ type
 /// Примечание:
 ///   • вычисленные параметры НЕ копируются методом Clone
     function Fit(X: Matrix): IUnsupervisedTransformer;
+    
+    /// Последовательно выполняет Fit и Transform на одних и тех же данных.
+    function FitTransform(X: Matrix): Matrix;
   
     /// Преобразует матрицу X в пространство главных компонент.
     /// Возвращает матрицу m × k.
@@ -2067,6 +2076,9 @@ type
 /// Примечание:
 ///   • выбранные признаки НЕ копируются методом Clone
     function Fit(X: Matrix): IUnsupervisedTransformer;
+    
+    /// Последовательно выполняет Fit и Transform на одних и тех же данных.
+    function FitTransform(X: Matrix): Matrix;
   
     /// Возвращает матрицу, содержащую только отобранные признаки.
     function Transform(X: Matrix): Matrix;
@@ -2151,6 +2163,9 @@ type
 /// Примечание:
 ///   • выбранные признаки НЕ копируются методом Clone
     function Fit(X: Matrix; y: Vector): ISupervisedTransformer;
+    
+    /// Последовательно выполняет Fit и Transform на одних и тех же данных.
+    function FitTransform(X: Matrix; y: Vector): Matrix;
   
     /// Возвращает матрицу, содержащую только выбранные признаки.
     function Transform(X: Matrix): Matrix;
@@ -2197,6 +2212,9 @@ type
 /// Примечание:
 ///   • у трансформера отсутствует обученное состояние
     function Fit(X: Matrix): IUnsupervisedTransformer;
+
+    /// Последовательно выполняет Fit и Transform на одних и тех же данных.
+    function FitTransform(X: Matrix): Matrix;
 
 /// Применяет нормализацию к матрице X.
 /// Каждая строка масштабируется так, чтобы ее норма соответствовала выбранному типу.
@@ -3416,12 +3434,40 @@ end;
 
 function LogisticRegression.PredictLabels(X: Matrix): array of integer;
 begin
-  var P := PredictProba(X);
-  
-  SetLength(Result, P.RowCount);
-  
-  for var i := 0 to P.RowCount - 1 do
-    Result[i] := P.RowArgMax(i);
+  if not fFitted then
+    NotFittedError(ER_FIT_NOT_CALLED);
+
+  if X = nil then
+    ArgumentNullError(ER_X_NULL);
+
+  if MLConfig.ValidateFiniteInputs then
+    CheckXForPredict(X);
+
+  if X.ColCount <> fW.RowCount then
+    DimensionError(ER_FEATURE_COUNT_MISMATCH, X.ColCount, fW.RowCount);
+
+  var m := X.RowCount;
+  var Z := X * fW;
+
+  SetLength(Result, m);
+
+  for var i := 0 to m - 1 do
+  begin
+    var best := 0;
+    var bestVal := Z[i,0] + fIntercept[0];
+
+    for var k := 1 to fClassCount - 1 do
+    begin
+      var score := Z[i,k] + fIntercept[k];
+      if score > bestVal then
+      begin
+        bestVal := score;
+        best := k;
+      end;
+    end;
+
+    Result[i] := best;
+  end;
 end;
 
 function LogisticRegression.ToString: string;
@@ -4074,8 +4120,8 @@ begin
 
   var leftOrders, rightOrders: array of array of integer;
   SplitNodeOrders(nodeOrders, split.Feature, split.LeftCount, split.LeftOrderSize, leftOrders, rightOrders);
-  var leftArr := leftOrders[0];
-  var rightArr := rightOrders[0];
+  //var leftArr := leftOrders[0];
+  //var rightArr := rightOrders[0];
   var rightCount := n - split.LeftCount;
 
   if (split.LeftCount < fMinSamplesLeaf) or
@@ -6105,11 +6151,8 @@ begin
     yPred[i] := fInitValue;
 
   foreach var tree in fEstimators do
-  begin
-    var delta := tree.Predict(X);
     for var i := 0 to n - 1 do
-      yPred[i] += fLearningRate * delta[i];
-  end;
+      yPred[i] += fLearningRate * tree.PredictOne(X, i);
 
   Result := yPred;
 end;
@@ -6912,12 +6955,8 @@ begin
   // --- накопление логитов
   foreach var trees in fEstimators do
     for var cls := 0 to classCount - 1 do
-    begin
-      var delta := trees[cls].Predict(X);
-
       for var i := 0 to nSamples - 1 do
-        logits[i, cls] += fLearningRate * delta[i];
-    end;
+        logits[i, cls] += fLearningRate * trees[cls].PredictOne(X, i);
 
   var probs := new Matrix(nSamples, classCount);
 
@@ -8786,6 +8825,12 @@ begin
   Result := Self;
 end;
 
+function StandardScaler.FitTransform(X: Matrix): Matrix;
+begin
+  Fit(X);
+  Result := Transform(X);
+end;
+
 function StandardScaler.Transform(X: Matrix): Matrix;
 begin
   if not fFitted then
@@ -8878,6 +8923,12 @@ begin
 
   fFitted := true;
   Result := Self;
+end;
+
+function MinMaxScaler.FitTransform(X: Matrix): Matrix;
+begin
+  Fit(X);
+  Result := Transform(X);
 end;
 
 function MinMaxScaler.Transform(X: Matrix): Matrix;
@@ -8998,6 +9049,12 @@ begin
   Result := Self;
 end;
 
+function PCATransformer.FitTransform(X: Matrix): Matrix;
+begin
+  Fit(X);
+  Result := Transform(X);
+end;
+
 function PCATransformer.Transform(X: Matrix): Matrix;
 begin
   if not fFitted then
@@ -9073,6 +9130,12 @@ begin
   fFitted := true;
 
   Result := Self;
+end;
+
+function VarianceThreshold.FitTransform(X: Matrix): Matrix;
+begin
+  Fit(X);
+  Result := Transform(X);
 end;
 
 function VarianceThreshold.Transform(X: Matrix): Matrix;
@@ -9396,6 +9459,12 @@ begin
   Result := Self;
 end;
 
+function SelectKBest.FitTransform(X: Matrix; y: Vector): Matrix;
+begin
+  Fit(X, y);
+  Result := Transform(X);
+end;
+
 function SelectKBest.Transform(X: Matrix): Matrix;
 begin
   if not fFitted then
@@ -9463,6 +9532,12 @@ begin
 
   fFitted := true;
   Result := Self;
+end;
+
+function Normalizer.FitTransform(X: Matrix): Matrix;
+begin
+  Fit(X);
+  Result := Transform(X);
 end;
 
 function Normalizer.Transform(X: Matrix): Matrix;

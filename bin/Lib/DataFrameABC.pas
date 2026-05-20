@@ -47,7 +47,6 @@ type
     columns: List<Column>;
     fschema: DataFrameSchema;
 
-    procedure RebuildSchema;
     procedure CommitAddedColumn(c: Column);
     procedure ValidateColumnsAgainstSchema;
     procedure ValidateColumnsAgainstSchema(candidate: DataFrameSchema);
@@ -194,18 +193,23 @@ type
     /// Не изменяйте их после передачи в DataFrame.
     procedure AddBoolColumn(name: string; data: array of boolean; valid: array of boolean := nil);
     
-    /// Возвращает внутренний буфер целочисленного столбца без копирования.
-    /// Не изменяйте его, иначе DataFrame будет повреждён.
+    /// Возвращает целочисленный массив значений столбца с данным именем.
     function GetIntColumn(name: string): array of integer;
-    /// Возвращает внутренний буфер вещественного столбца без копирования.
-    /// Не изменяйте его, иначе DataFrame будет повреждён.
+    /// Возвращает вещественный массив значений столбца с данным именем.
     function GetFloatColumn(name: string): array of real;
-    /// Возвращает внутренний буфер строкового столбца без копирования.
-    /// Не изменяйте его, иначе DataFrame будет повреждён.
+    /// Возвращает строковый массив значений столбца с данным именем.
     function GetStrColumn(name: string): array of string;
-    /// Возвращает внутренний буфер логического столбца без копирования.
-    /// Не изменяйте его, иначе DataFrame будет повреждён.
+    /// Возвращает логический массив значений столбца с данным именем.
     function GetBoolColumn(name: string): array of boolean;
+    
+    /// Возвращает целочисленный массив значений столбца с данным именем.
+    function Int(name: string): array of integer;
+    /// Возвращает вещественный массив значений столбца с данным именем.
+    function Float(name: string): array of real;
+    /// Возвращает строковый массив значений столбца с данным именем.
+    function Str(name: string): array of string;
+    /// Возвращает логический массив значений столбца с данным именем.
+    function Bool(name: string): array of boolean;
     
     /// Вычисляет сумму значений столбца по индексу
     function Sum(colIndex: integer): real; 
@@ -2170,29 +2174,6 @@ begin
   Result.AssertSchemaConsistent;
 end;
 
-procedure DataFrame.RebuildSchema;
-begin
-  var n := columns.Count;
-  var names := new string[n];
-  var types := new ColumnType[n];
-  var cats := new boolean[n];
-
-  for var i := 0 to n - 1 do
-  begin
-    var info := columns[i].Info;
-    names[i] := info.Name;
-    types[i] := info.ColType;
-
-    // берем из старой schema
-    if (fSchema <> nil) and (i < fSchema.ColumnCount) then
-      cats[i] := fSchema.CategoricalFlags[i]
-    else
-      cats[i] := false;
-  end;
-
-  fSchema := new DataFrameSchema(names, types, cats);
-end;
-
 procedure DataFrame.CommitAddedColumn(c: Column);
 begin
   var n := columns.Count;
@@ -2206,7 +2187,7 @@ begin
     names[i] := info.Name;
     types[i] := info.ColType;
     if fSchema <> nil then
-      cats[i] := fSchema.CategoricalFlags[i]
+      cats[i] := fSchema.IsCategoricalAt(i)
     else
       cats[i] := false;
   end;
@@ -2320,6 +2301,26 @@ begin
   var i := ColumnIndex(name);
   var c := BoolColumn(columns[i]);
   Result := c.Data;
+end;
+
+function DataFrame.Int(name: string): array of integer;
+begin
+  Result := GetIntColumn(name);
+end;
+
+function DataFrame.Float(name: string): array of real;
+begin
+  Result := GetFloatColumn(name);
+end;
+
+function DataFrame.Str(name: string): array of string;
+begin
+  Result := GetStrColumn(name);
+end;
+
+function DataFrame.Bool(name: string): array of boolean;
+begin
+  Result := GetBoolColumn(name);
 end;
 
 function DataFrame.TrainTestSplit(testRatio: real; shuffle: boolean; seed: integer): (DataFrame, DataFrame);
@@ -2595,7 +2596,7 @@ function DataFrame.Mean(colName: string): real
 function DataFrame.Median(colIndex: integer): real;
 begin
   CheckColumnIndex(colIndex);
-  Result := Statistics.Median(Self, fSchema.ColumnNames[colIndex]);
+  Result := Statistics.Median(Self, fSchema.NameAt(colIndex));
 end; 
 
 function DataFrame.Median(colName: string): real;
@@ -3086,7 +3087,7 @@ begin
 
   // копируем старые значения
   for var i := 0 to n - 1 do
-    cats[i] := fSchema.CategoricalFlags[i];
+    cats[i] := fSchema.IsCategoricalAt(i);
 
   // применяем новые
   foreach var name in names do
@@ -3207,7 +3208,7 @@ begin
   // КЛЮЧЕВОЕ: перенос schema
   var cats := new boolean[ColumnCount];
   for var i := 0 to ColumnCount - 1 do
-    cats[i] := fSchema.CategoricalFlags[i];
+    cats[i] := fSchema.IsCategoricalAt(i);
 
   res.SetSchema(new DataFrameSchema(
     fSchema.ColumnNames,
@@ -3311,12 +3312,12 @@ begin
 
   for var i := 0 to n - 1 do
   begin
-    var oldName := fSchema.ColumnNames[i];
+    var oldName := fSchema.NameAt(i);
     var newName := if map.ContainsKey(oldName) then map[oldName] else oldName;
 
     names[i] := newName;
-    types[i] := fSchema.Types[i];
-    cats[i] := fSchema.CategoricalFlags[i];
+    types[i] := fSchema.ColumnTypeAt(i);
+    cats[i] := fSchema.IsCategoricalAt(i);
   end;
 
   res.SetSchema(new DataFrameSchema(names, types, cats));
@@ -3565,9 +3566,9 @@ begin
 
   for var j := 0 to oldN - 1 do
   begin
-    names[j] := fSchema.ColumnNames[j];
-    types[j] := fSchema.Types[j];
-    cats[j] := fSchema.CategoricalFlags[j];
+    names[j] := fSchema.NameAt(j);
+    types[j] := fSchema.ColumnTypeAt(j);
+    cats[j] := fSchema.IsCategoricalAt(j);
   end;
 
   names[oldN] := name;
@@ -4260,7 +4261,7 @@ begin
 
   for var i := 0 to ColumnCount - 1 do
   begin
-    var name := fSchema.ColumnNames[i].PadRight(nameWidth);
+    var name := fSchema.NameAt(i).PadRight(nameWidth);
     var typ := GetColumnType(i).ToString.Replace('ct','').PadRight(typeWidth);
     PABCSystem.Println($'{name} : {typ}');
   end;
@@ -4290,7 +4291,7 @@ begin
   for var i := 0 to ColumnCount - 1 do
   begin
     var t := ColumnTypeToString(GetColumnType(i));
-    if fSchema.CategoricalFlags[i] then
+    if fSchema.IsCategoricalAt(i) then
       t += ' (categorical)';
 
     types[i] := t;
@@ -4305,7 +4306,7 @@ begin
 
   for var i := 0 to ColumnCount - 1 do
   begin
-    var name := fSchema.ColumnNames[i].PadRight(nameWidth);
+    var name := fSchema.NameAt(i).PadRight(nameWidth);
     var typ := types[i].PadRight(maxTypeWidth);
     var cnt := Count(i);
 
@@ -4428,15 +4429,15 @@ begin
 
   for var i := 0 to n - 1 do
   begin
-    var name := fSchema.ColumnNames[i];
+    var name := fSchema.NameAt(i);
 
     namesArr[i] := name;
-    cats[i] := fSchema.CategoricalFlags[i];
+    cats[i] := fSchema.IsCategoricalAt(i);
 
     if toCast.Contains(name) then
       types[i] := ctInt
     else
-      types[i] := fSchema.Types[i];
+      types[i] := fSchema.ColumnTypeAt(i);
   end;
 
   res.SetSchema(new DataFrameSchema(namesArr, types, cats));
@@ -5538,7 +5539,7 @@ begin
   // числовые столбцы
   for var i := 0 to df.ColumnCount - 1 do
     if df.GetColumnType(i) in [ColumnType.ctInt, ColumnType.ctFloat] then
-      names.Add(df.fSchema.ColumnNames[i]);
+      names.Add(df.fSchema.NameAt(i));
 
   var n := names.Count;
   if n = 0 then
@@ -5626,7 +5627,7 @@ begin
       means[i] := mean;
       stds[i] := Sqrt(variance);
       if stds[i] = 0 then
-        Error(ER_ZERO_STD_COLUMN, df.fSchema.ColumnNames[i]);
+        Error(ER_ZERO_STD_COLUMN, df.fSchema.NameAt(i));
       isNumeric[i] := true;
     end;
   end;
@@ -5635,7 +5636,7 @@ begin
   for var i := 0 to df.ColumnCount - 1 do
   begin
     if isNumeric[i] then
-      res.AddFloatColumn(df.fSchema.ColumnNames[i], new real[df.RowCount], nil)
+      res.AddFloatColumn(df.fSchema.NameAt(i), new real[df.RowCount], nil)
     else
       res.AddColumnAlias(df.GetColumn(i)); 
   end;
@@ -5708,7 +5709,7 @@ begin
     begin
       var (mn, mx) := df.MinMax(i);
       if mn = mx then
-        Error(ER_ZERO_RANGE_COLUMN, df.fSchema.ColumnNames[i]);
+        Error(ER_ZERO_RANGE_COLUMN, df.fSchema.NameAt(i));
       mins[i] := mn;
       maxs[i] := mx;
       isNumeric[i] := true;
@@ -5719,7 +5720,7 @@ begin
   for var i := 0 to df.ColumnCount - 1 do
   begin
     if isNumeric[i] then
-      res.AddFloatColumn(df.fSchema.ColumnNames[i], new real[df.RowCount], nil)
+      res.AddFloatColumn(df.fSchema.NameAt(i), new real[df.RowCount], nil)
     else
       res.AddColumnAlias(df.GetColumn(i)); 
   end;

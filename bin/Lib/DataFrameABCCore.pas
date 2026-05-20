@@ -39,36 +39,55 @@ type
     function GetTypes: array of ColumnType;
     function GetCategoricalFlags: array of boolean;
   public
+    /// Возвращает количество столбцов в схеме
     property ColumnCount: integer read fNames.Length;
+    /// Возвращает копию массива имён столбцов
     property ColumnNames: array of string read GetColumnNames;
+    /// Возвращает копию массива типов столбцов
     property Types: array of ColumnType read GetTypes;
+    /// Возвращает копию массива categorical-флагов
     property CategoricalFlags: array of boolean read GetCategoricalFlags;
 
+    /// Возвращает индекс столбца по имени
     function IndexOf(name: string): integer;
+    /// Проверяет наличие столбца с указанным именем
     function HasColumn(name: string): boolean;
 
+    /// Возвращает тип столбца по индексу
     function ColumnTypeAt(i: integer): ColumnType;
+    /// Проверяет categorical-флаг столбца по индексу
     function IsCategoricalAt(i: integer): boolean;
     
+    /// Возвращает тип столбца по имени
     function GetColumnType(name: string): ColumnType;
+    /// Проверяет categorical-флаг столбца по имени
     function IsCategorical(name: string): boolean;
     
+    /// Возвращает имя столбца по индексу
     function NameAt(i: integer): string;
 
+    /// Создаёт схему по именам, типам и categorical-флагам
     constructor Create(names: array of string; types: array of ColumnType;
       isCategorical: array of boolean := nil);
       
+    /// Печатает схему без перевода строки в конце
     procedure Print;
     
+    /// Печатает схему и переводит строку
     procedure Println;
 
     { --- schema operations (immutable) --- }
+    /// Возвращает схему, содержащую только указанные столбцы
     function Select(indices: array of integer): DataFrameSchema;
+    /// Возвращает схему без указанных столбцов
     function Drop(indices: array of integer): DataFrameSchema;
+    /// Возвращает схему с переименованным столбцом
     function Rename(oldName, newName: string): DataFrameSchema;
+    /// Возвращает схему с изменённым categorical-флагом столбца
     function WithCategorical(name: string; value: boolean := True): DataFrameSchema;
 
     { --- join helpers --- }
+    /// Объединяет две схемы по правилам Join
     class function Merge(
       left, right: DataFrameSchema;
       leftKeys, rightKeys: array of integer;

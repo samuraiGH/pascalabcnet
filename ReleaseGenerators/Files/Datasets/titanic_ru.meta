@@ -1,4 +1,4 @@
-name = TitanicRu
+﻿name = TitanicRu
 
 task = classification
 
@@ -56,9 +56,14 @@ value.Класс.1.en = first class
 value.Класс.2.en = second class
 value.Класс.3.en = third class
 
+value.Пол.муж.ru = муж
+value.Пол.жен.ru = жен
 value.Пол.муж.en = male
 value.Пол.жен.en = female
 
+value.ПортПосадки.Саутгемптон.ru = Саутгемптон
+value.ПортПосадки.Шербур.ru = Шербур
+value.ПортПосадки.Квинстаун.ru = Квинстаун
 value.ПортПосадки.Саутгемптон.en = Southampton
 value.ПортПосадки.Шербур.en = Cherbourg
 value.ПортПосадки.Квинстаун.en = Queenstown

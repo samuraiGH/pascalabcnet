@@ -39,15 +39,39 @@ begin
   for var j := 0 to p - 1 do
   begin
     var col := df[colNames[j]];
-
-    for var i := 0 to n - 1 do
-    begin
-      var value: real;
-
-      if not col.TryGetNumericValue(i, value) then
+    case col.Info.ColType of
+      ColumnType.ctInt:
+        begin
+          var c := IntColumn(col);
+          for var i := 0 to n - 1 do
+          begin
+            if not c.IsValid[i] then
+              ArgumentError(ER_TO_MATRIX_NON_NUMERIC, colNames[j]);
+            Result[i,j] := c.Data[i];
+          end;
+        end;
+      ColumnType.ctFloat:
+        begin
+          var c := FloatColumn(col);
+          for var i := 0 to n - 1 do
+          begin
+            if not c.IsValid[i] then
+              ArgumentError(ER_TO_MATRIX_NON_NUMERIC, colNames[j]);
+            Result[i,j] := c.Data[i];
+          end;
+        end;
+      ColumnType.ctBool:
+        begin
+          var c := BoolColumn(col);
+          for var i := 0 to n - 1 do
+          begin
+            if not c.IsValid[i] then
+              ArgumentError(ER_TO_MATRIX_NON_NUMERIC, colNames[j]);
+            Result[i,j] := if c.Data[i] then 1.0 else 0.0;
+          end;
+        end;
+      else
         ArgumentError(ER_TO_MATRIX_NON_NUMERIC, colNames[j]);
-
-      Result[i,j] := value;
     end;
   end;
 end;
@@ -59,15 +83,39 @@ begin
   Result := new Vector(n);
 
   var col := df[colName];
-
-  for var i := 0 to n - 1 do
-  begin
-    var value: real;
-
-    if not col.TryGetNumericValue(i, value) then
+  case col.Info.ColType of
+    ColumnType.ctInt:
+      begin
+        var c := IntColumn(col);
+        for var i := 0 to n - 1 do
+        begin
+          if not c.IsValid[i] then
+            ArgumentError(ER_TO_VECTOR_NON_NUMERIC, colName);
+          Result[i] := c.Data[i];
+        end;
+      end;
+    ColumnType.ctFloat:
+      begin
+        var c := FloatColumn(col);
+        for var i := 0 to n - 1 do
+        begin
+          if not c.IsValid[i] then
+            ArgumentError(ER_TO_VECTOR_NON_NUMERIC, colName);
+          Result[i] := c.Data[i];
+        end;
+      end;
+    ColumnType.ctBool:
+      begin
+        var c := BoolColumn(col);
+        for var i := 0 to n - 1 do
+        begin
+          if not c.IsValid[i] then
+            ArgumentError(ER_TO_VECTOR_NON_NUMERIC, colName);
+          Result[i] := if c.Data[i] then 1.0 else 0.0;
+        end;
+      end;
+    else
       ArgumentError(ER_TO_VECTOR_NON_NUMERIC, colName);
-
-    Result[i] := value;
   end;
 end;
 
