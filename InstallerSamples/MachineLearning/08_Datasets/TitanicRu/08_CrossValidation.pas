@@ -32,7 +32,7 @@ begin
   var testAccuracy := Metrics.Accuracy(y, pred);
 
   var total := 0.0;
-  var folds := Validation.StratifiedKFold(df.GetIntColumn('Выжил'), 5, seed := 1);
+  var folds := Validation.StratifiedKFold(df.Int('Выжил'), 5, seed := 1);
   var foldsCount := 0;
 
   foreach var (trainIdx, testIdx) in folds do

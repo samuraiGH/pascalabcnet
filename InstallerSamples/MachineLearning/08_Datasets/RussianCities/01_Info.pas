@@ -8,5 +8,7 @@ begin
   df.Schema.Println;
   df.PrintInfo;
   Println;
+  ds.Info;
+  Println;
   df.Print;
 end.

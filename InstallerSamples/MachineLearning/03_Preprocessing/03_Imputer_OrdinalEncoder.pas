@@ -1,4 +1,4 @@
-// Пример табличной предобработки:
+﻿// Пример табличной предобработки:
 // сначала заполняем пропуски в числовом столбце,
 // затем кодируем категориальный столбец числами.
 uses MLABC;
@@ -18,13 +18,13 @@ city,population,region
   Println;
 
   // Заполняем пропуск в числовом столбце средним значением
-  var imputer := new Imputer(['population']);
-  df := imputer.FitTransform(df);
+  var imp := new Imputer(['population']);
+  df := imp.FitTransform(df);
 
   // Кодируем названия регионов числами 0, 1, 2, ...
   var encoder := new OrdinalEncoder('region');
   df := encoder.FitTransform(df);
 
-  Println('После Imputer и LabelEncoder:');
+  Println('После Imputer и OrdinalEncoder:');
   df.Print;
 end.

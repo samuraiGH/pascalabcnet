@@ -18,6 +18,6 @@ begin
 
   Plot.HistMany([diedAges,survivedAges], bins := 20, colors := [Colors.IndianRed, Colors.SteelBlue], alpha := 0.45, legend := ['не выжили','выжили']);
   Plot.Title := 'Титаник: возраст выживших (голубой) и невыживших (красный)';
-  Plot.XLabel('Возраст');
-  Plot.YLabel('Число пассажиров');
+  Plot.XLabel := 'Возраст';
+  Plot.YLabel := 'Число пассажиров';
 end.

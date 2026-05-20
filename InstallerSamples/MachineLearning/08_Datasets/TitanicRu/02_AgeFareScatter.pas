@@ -7,10 +7,10 @@ begin
 
   var age := df.ToVector('Возраст');
   var fare := df.ToVector('ЦенаБилета');
-  var y := df.GetIntColumn('Выжил');
+  var y := df.Int('Выжил');
 
   Plot.Points(age, fare, y, size := 5);
-  Plot.XLabel('Возраст');
-  Plot.YLabel('Цена билета');
+  Plot.XLabel := 'Возраст';
+  Plot.YLabel := 'Цена билета';
   Plot.Title := 'Титаник: возраст, цена билета и выживание';
 end.
