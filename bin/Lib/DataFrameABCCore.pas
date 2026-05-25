@@ -286,6 +286,8 @@ const
     'Столбец не является Str!!Column is not Str';
   ER_COLUMN_NOT_BOOL =
     'Столбец не является Bool!!Column is not Bool';
+  ER_VALUE_IS_NA =
+    'Значение в столбце "{0}" равно NA!!Value in column "{0}" is NA';
   ER_DUPLICATE_COLUMN_NAME =
     'Повторяющееся имя столбца "{0}"!!Duplicate column name "{0}"';
   ER_NAMES_NULL =
@@ -903,17 +905,33 @@ begin
   Result := IsValid(fSchema.IndexOf(name));
 end;  
 
-function DataFrameCursor.Int(i: integer): integer :=
-  intAcc[i](pos);
+function DataFrameCursor.Int(i: integer): integer;
+begin
+  if not IsValid(i) then
+    Error(ER_VALUE_IS_NA, fSchema.NameAt(i));
+  Result := intAcc[i](pos);
+end;
 
-function DataFrameCursor.Float(i: integer): real :=
-  floatAcc[i](pos);
+function DataFrameCursor.Float(i: integer): real;
+begin
+  if not IsValid(i) then
+    Error(ER_VALUE_IS_NA, fSchema.NameAt(i));
+  Result := floatAcc[i](pos);
+end;
 
-function DataFrameCursor.Str(i: integer): string :=
-  strAcc[i](pos);
+function DataFrameCursor.Str(i: integer): string;
+begin
+  if not IsValid(i) then
+    Error(ER_VALUE_IS_NA, fSchema.NameAt(i));
+  Result := strAcc[i](pos);
+end;
 
-function DataFrameCursor.Bool(i: integer): boolean :=
-  boolAcc[i](pos);
+function DataFrameCursor.Bool(i: integer): boolean;
+begin
+  if not IsValid(i) then
+    Error(ER_VALUE_IS_NA, fSchema.NameAt(i));
+  Result := boolAcc[i](pos);
+end;
   
 function DataFrameCursor.Int(name: string): integer;
 begin

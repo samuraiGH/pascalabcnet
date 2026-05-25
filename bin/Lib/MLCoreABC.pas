@@ -49,7 +49,6 @@ type
 
   /// Базовый интерфейс модели машинного обучения
   IModel = interface(IMatrixStep)
-    // function Predict(X: Matrix): Vector; // вынес в IPredictiveModel
     function Clone: IModel;
     function Name: string;
     property IsFitted: boolean read;
@@ -129,8 +128,12 @@ type
   /// Позволяет получать значения в диапазоне (0, 1)
   /// вместо только итогового решения.
   IProbabilisticClassifier = interface(IClassifier)
-    /// Возвращает матрицу вероятностей размера (nSamples × nClasses).
-    /// Столбцы соответствуют классам в порядке внутреннего кодирования модели
+    /// Возвращает матрицу вероятностей классов для всех объектов из X.
+    /// Размер результата: nSamples × nClasses, где:
+    /// - nSamples — число объектов в X;
+    /// - nClasses — число классов модели.
+    /// Элемент [i, k] содержит вероятность того, что объект i принадлежит классу k.
+    /// Сумма вероятностей в каждой строке равна 1.
     function PredictProba(X: Matrix): Matrix;
   end;
 
