@@ -2314,6 +2314,16 @@ namespace PascalABCCompiler.TreeConverter
             {
                 return _ctn.base_generic_instance.ConvertSymbolInfo(sil);
             }
+
+            if (_ctn != null && _ctn.is_generic_type_definition)
+            {
+				if (curscope.Find("self", curscope)?.FirstOrDefault()?.sym_info is var_definition_node self)
+				{
+					var selftype = (generic_instance_type_node)self.type;
+					return selftype.ConvertSymbolInfo(sil);
+				}
+			}
+
             return sil;
         }
 
