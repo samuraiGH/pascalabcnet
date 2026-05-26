@@ -39,6 +39,9 @@ uses MLCoreABC;
 uses LinearAlgebraML;
 
 type
+  MatrixPipeline = class;
+  UMatrixPipeline = class;
+
 {$region Activations}
 /// Активационные функции для моделей
   Activations = static class
@@ -1789,6 +1792,15 @@ type
     /// Последний шаг обязан быть моделью (IModel).
     /// Возвращает сконструированный конвейер.
     static function Build(params steps: array of IPipelineStep): MatrixPipeline;
+
+    /// Строит supervised-конвейер для задачи классификации.
+    static function BuildClassification(params steps: array of IPipelineStep): MatrixPipeline;
+
+    /// Строит supervised-конвейер для задачи регрессии.
+    static function BuildRegression(params steps: array of IPipelineStep): MatrixPipeline;
+
+    /// Строит unsupervised-конвейер для задачи кластеризации.
+    static function BuildClustering(params steps: array of IPipelineStep): UMatrixPipeline;
     
     /// Устанавливает или заменяет модель.
     function SetModel(m: ISupervisedModel): MatrixPipeline;
@@ -8477,6 +8489,24 @@ begin
   end;
 
   Result := pipe;
+end;
+
+class function MatrixPipeline.BuildClassification(params steps: array of IPipelineStep): MatrixPipeline;
+begin
+  var stepsCopy := Copy(steps);
+  Result := Build(stepsCopy);
+end;
+
+class function MatrixPipeline.BuildRegression(params steps: array of IPipelineStep): MatrixPipeline;
+begin
+  var stepsCopy := Copy(steps);
+  Result := Build(stepsCopy);
+end;
+
+class function MatrixPipeline.BuildClustering(params steps: array of IPipelineStep): UMatrixPipeline;
+begin
+  var stepsCopy := Copy(steps);
+  Result := UMatrixPipeline.Build(stepsCopy);
 end;
 
 function MatrixPipeline.Add(t: ITransformer): MatrixPipeline;

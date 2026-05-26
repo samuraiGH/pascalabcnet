@@ -718,7 +718,7 @@ namespace VisualPascalABC
         private NamedValue GetNullBasedArray(Value val)
         {
             IList<FieldInfo> flds = val.Type.GetFields();
-            if (flds.Count != 3) return null;
+            //if (flds.Count != 3) return null;
             foreach (FieldInfo fi in flds)
                 if (fi.Name == "NullBasedArray") return fi.GetValue(val);
             return null;
