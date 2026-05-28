@@ -1,4 +1,4 @@
-uses MLABC;
+﻿uses MLABC;
 uses TestHelpers in '..\TestHelpers.pas';
 
 begin
@@ -6,8 +6,7 @@ begin
   var df := ds.Data;
 
   var pipe :=
-    DataPipeline.Build(
-      TaskKind.tkClassification,
+    DataPipeline.BuildClassification(
       ds.Target,
       ds.Features,
       new StandardScaler,
@@ -25,3 +24,4 @@ begin
   Check(y.Length = testDf.RowCount, 'Encoded labels length mismatch');
   Check(Metrics.Accuracy(y, pred) > 0.8, 'Pipeline accuracy is unexpectedly low');
 end.
+

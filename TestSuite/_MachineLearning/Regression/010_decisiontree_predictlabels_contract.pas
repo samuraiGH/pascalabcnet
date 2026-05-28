@@ -1,4 +1,4 @@
-uses MLABC;
+﻿uses MLABC;
 uses TestHelpers in '..\TestHelpers.pas';
 
 begin
@@ -21,9 +21,8 @@ begin
 
   for var i := 0 to X.RowCount - 1 do
   begin
-    var pi := Round(pred[i]);
-    Check(Abs(pred[i] - pi) < 1e-12, $'Predict[{i}] is not an original integer label');
-    Check((labels[i] >= 0) and (labels[i] < modelClasses.Length), $'PredictLabels[{i}] out of range');
-    Check(modelClasses[labels[i]] = pi.ToString, $'Predict[{i}] and PredictLabels[{i}] are inconsistent');
+    var pi := pred[i];
+    Check((pi >= 0) and (pi < modelClasses.Length), $'Predict[{i}] out of range');
+    Check(labels[i] = pi.ToString, $'Predict[{i}] and PredictLabels[{i}] are inconsistent');
   end;
 end.

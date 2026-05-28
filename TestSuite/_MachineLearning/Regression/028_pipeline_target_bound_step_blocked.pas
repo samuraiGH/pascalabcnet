@@ -1,4 +1,4 @@
-uses MLABC, PreprocessorABC, MLCoreABC;
+﻿uses MLABC, PreprocessorABC, MLCoreABC;
 uses TestHelpers in '..\TestHelpers.pas';
 
 type
@@ -41,8 +41,7 @@ end;
 
 begin
   CheckRaises(procedure -> begin
-    var pipe := DataPipeline.Build(
-      TaskKind.tkClassification,
+    var pipe := DataPipeline.BuildClassification(
       'Target',
       Arr($'X'),
       new BadTargetStep('Target'),
@@ -51,3 +50,4 @@ begin
   end,
   'DataPipeline must reject a bound preprocessor that targets the target column');
 end.
+

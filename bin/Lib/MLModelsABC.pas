@@ -1366,9 +1366,10 @@ type
 /// Используется для анализа обучения.
     function PredictStageProba(X: Matrix; m: integer): Matrix;
     
-/// Предсказывает классы по первым m итерациям бустинга.
+/// Предсказывает метки классов по первым m итерациям бустинга.
+/// Возвращает их в том же виде, в каком они были поданы модели при обучении.
 /// Удобно для построения learning curve.
-    function PredictStage(X: Matrix; m: integer): Vector;
+    function PredictStage(X: Matrix; m: integer): array of integer;
     
 /// Текущее количество деревьев в ансамбле.
     function TreeCount: integer := fEstimators.Count;
@@ -1458,7 +1459,6 @@ type
   private
     // ==== classification state ====
     fYEnc: array of integer;
-    fClasses: array of double;
     fClassCount: integer;
     fLabels: ClassifierLabelHelper;
 
@@ -1594,7 +1594,7 @@ type
 ///   • обученное состояние модели (центры кластеров) НЕ копируется методом Clone
     function Fit(X: Matrix): IUnsupervisedModel;
     
-    /// Возвращает внутренний индекс кластера для каждого объекта из X.
+    /// Возвращает номер кластера для каждого объекта из X.
     /// Требует предварительного вызова Fit.
     function Predict(X: Matrix): array of integer;
 
@@ -1684,23 +1684,23 @@ type
 {$endregion Models}
 
 {$region MatrixPipeline}
-/// Последовательный конвейер машинного обучения (supervised).
+/// Общая база для матричных конвейеров с учителем.
 /// Гарантирует строгий порядок выполнения шагов:
 ///   [преобразователи] → [модель].
 ///
 /// Поддерживает:
-///   • преобразователи без учёта целевой переменной (unsupervised);
-///   • преобразователи с учётом целевой переменной (supervised);
+///   • преобразователи без учёта целевой переменной;
+///   • преобразователи с учётом целевой переменной;
 ///   • одну финальную модель с учителем.
 ///
 /// Все преобразователи применяются последовательно к признакам X,
 /// после чего финальная модель обучается на (X, y).
 ///
 /// Обеспечивает единый интерфейс Fit(X, y) / Predict(X)
-/// и воспроизводимость полного процесса обучения
+/// и воспроизводимость полного процесса обучения.
 /// 
 /// MatrixPipeline используется, когда данные уже представлены 
-/// в виде Matrix X и Vector y
+/// в виде Matrix X и вектора y.
   MatrixPipeline = class(IModel)
   protected
     fTransformers: List<ITransformer>;
@@ -1775,8 +1775,8 @@ type
 
     /// Строит матричный конвейер для задачи классификации.
     /// Шаги указываются в порядке выполнения:
-/// сначала преобразователи, затем модель.
-/// Последний шаг должен быть моделью.
+    /// сначала преобразователи, затем модель.
+    /// Последний шаг должен быть моделью.
     static function BuildClassification(params steps: array of IPipelineStep): ClassificationMatrixPipeline;
 
     /// Строит матричный конвейер для задачи регрессии.
@@ -1801,7 +1801,7 @@ type
 ///   X — матрица m × n (m объектов, n признаков).
 ///   y — вектор длины m с целевыми значениями.
 /// Последовательно обучает все трансформеры и применяет их к данным,
-/// после чего обучает финальную supervised-модель.
+/// после чего обучает финальную модель с учителем.
 ///
 /// Примечание:
 ///   • обученное состояние пайплайна НЕ копируется методом Clone
@@ -1855,47 +1855,36 @@ type
     function Fit(X: Matrix; y: Vector): IRegressor; reintroduce;
   end;
   
-/// Последовательный конвейер машинного обучения (unsupervised).
-/// Гарантирует строгий порядок выполнения шагов:
-///   [преобразователи].
+/// Общая база для матричных конвейеров без учителя.
 ///
-/// Поддерживает:
-///   • преобразователи без учёта целевой переменной (unsupervised).
-///
-/// Все преобразователи применяются последовательно к признакам X.
-///
-/// Обеспечивает единый интерфейс Fit(X) / Transform(X)
-/// и воспроизводимость полного процесса преобразования данных.
-///
-/// Используется, когда данные уже представлены
-/// в виде Matrix X и отсутствует целевая переменная
+/// Поддерживает последовательность матричных преобразователей
+/// и одну финальную модель без учителя.
+/// Используется как базовый класс для специализированных
+/// матричных конвейеров, например ClusteringMatrixPipeline.
   UnsupervisedMatrixPipelineBase = class(IUnsupervisedModel)
   protected
     fTransformers: List<ITransformer>;
     fModel: IModel;
     fFitted: boolean;
   public
-  /// Создаёт конвейер машинного обучения для заданной модели:
-///   • model — модель, которая будет применена
-///     после последовательного применения всех преобразователей.
-/// Модель должна реализовывать интерфейс IModel (без учёта целевой переменной)
+    /// Создаёт конвейер машинного обучения для заданной модели.
+    /// Модель применяется после последовательного выполнения всех преобразователей.
     constructor Create(model: IModel);
 
-/// Создаёт пустой пайплайн (конвейер машинного обучения).
-/// Модель должна быть установлена через SetModel    
+    /// Создаёт пустой конвейер.
+    /// Модель должна быть установлена позже через SetModel.
     constructor Create;
   
-/// Строит конвейер машинного обучения из последовательности шагов.
-/// Шаги указываются в порядке выполнения:
-///   сначала преобразователи, затем модель.
-/// Последний шаг обязан быть моделью (IModel).
-/// Возвращает сконструированный конвейер.
+    /// Строит матричный конвейер для задачи кластеризации.
+    /// Шаги указываются в порядке выполнения:
+    /// сначала преобразователи, затем модель.
+    /// Последний шаг должен быть моделью.
     static function Build(params steps: array of IPipelineStep): ClusteringMatrixPipeline;
   
-/// Устанавливает или заменяет модель.
+    /// Устанавливает или заменяет модель.
     function SetModel(m: IModel): UnsupervisedMatrixPipelineBase;
     
-/// Добавляет преобразование в конец пайплайна    
+    /// Добавляет преобразование в конец пайплайна.
     function Add(t: ITransformer): UnsupervisedMatrixPipelineBase;
   
 /// Обучает пайплайн на данных.
@@ -1938,6 +1927,12 @@ type
     function Name: string := Self.GetType.Name;
   end;
 
+  /// Матричный конвейер для задачи кластеризации.
+  /// FitPredict работает с любым кластеризатором.
+  /// Predict для новых данных доступен только тогда,
+  /// когда финальная модель реализует IPredictiveClusterer
+  /// (например, KMeans).
+  /// Для алгоритмов вроде DBSCAN используйте FitPredict.
   ClusteringMatrixPipeline = class(UnsupervisedMatrixPipelineBase)
   end;
   
@@ -2093,7 +2088,7 @@ type
   
 /// Трансформер, удаляющий признаки с малой дисперсией.
 /// Удаляет столбцы X_j, для которых Var(X_j) < threshold.
-/// Не использует целевую переменную (unsupervised)
+/// Не использует целевую переменную.
   VarianceThreshold = class(IUnsupervisedTransformer)
   private
     fThreshold: real;
@@ -2465,8 +2460,8 @@ const
     'Метки классов недоступны. Убедитесь, что модель обучена и метки установлены!!Class labels are not available. Ensure the model is fitted and class labels are set';  
   ER_LABEL_INDEX_OUT_OF_RANGE =
     'Индекс метки {0} вне диапазона [0, {1})!!Label index {0} is out of range [0, {1})';
-  ER_PIPELINE_LAST_NOT_SUPERVISED_MODEL = 
-    'Последний шаг Pipeline должен быть supervised-моделью!!' +
+  ER_PIPELINE_LAST_NOT_SUPERVISED_MODEL =
+    'Последний шаг Pipeline должен быть моделью с учителем!!' +
     'Last Pipeline step must be a supervised model';
   ER_INTERNAL_INVALID_MODEL_CLONE =
     'Внутренняя ошибка: Clone модели вернул несовместимый тип!!' +
@@ -2636,7 +2631,6 @@ begin
   if MLConfig.ValidateFiniteInputs then
   begin
     CheckXForFit(X);
-    CheckYForFit(y);
   end;
   
   var m := X.RowCount;
@@ -2761,7 +2755,6 @@ begin
   if MLConfig.ValidateFiniteInputs then
   begin
     CheckXForFit(X);
-    CheckYForFit(y);
   end;
 
   if X.RowCount = 0 then
@@ -3306,7 +3299,6 @@ begin
   if MLConfig.ValidateFiniteInputs then
   begin
     CheckXForFit(X);
-    CheckYForFit(y);
   end;
 
   if X.RowCount = 0 then
@@ -4758,7 +4750,6 @@ begin
   if MLConfig.ValidateFiniteInputs then
   begin
     CheckXForFit(X);
-    CheckYForFit(y);
   end;
 
   if X.RowCount = 0 then
@@ -5992,7 +5983,6 @@ begin
   if MLConfig.ValidateFiniteInputs then
   begin
     CheckXForFit(XTrain);
-    CheckYForFit(yTrain);
   end;
 
   // --- shape checks ---
@@ -6013,7 +6003,6 @@ begin
     if MLConfig.ValidateFiniteInputs then
     begin
       CheckXForPredict(XVal);
-      CheckYForFit(yVal);
     end;
 
     if XVal.RowCount <> yVal.Length then
@@ -7123,12 +7112,12 @@ begin
   Result := probs;
 end;
 
-function GradientBoostingClassifier.PredictStage(X: Matrix; m: integer): Vector;
+function GradientBoostingClassifier.PredictStage(X: Matrix; m: integer): array of integer;
 begin
   var probs := PredictStageProba(X, m);
 
   var n := probs.RowCount;
-  var resultVec := new Vector(n);
+  SetLength(Result, n);
 
   for var i := 0 to n - 1 do
   begin
@@ -7142,10 +7131,8 @@ begin
         best := cls;
       end;
 
-    resultVec[i] := fClasses[best];
+    Result[i] := fClasses[best];
   end;
-
-  Result := resultVec;
 end;
 
 function GradientBoostingClassifier.FeatureImportances: Vector;
@@ -7506,11 +7493,6 @@ begin
   if fClassCount < 2 then
     ArgumentError(ER_NEED_AT_LEAST_TWO_CLASSES);
 
-  // сохранить оригинальные метки (double API)
-  SetLength(fClasses, fClassCount);
-  for var i := 0 to fClassCount - 1 do
-    fClasses[i] := classesInt[i];
-
   if fLabels = nil then
     fLabels := new ClassifierLabelHelper;
   fLabels.SetClassValues(classesInt);
@@ -7867,7 +7849,6 @@ begin
   if MLConfig.ValidateFiniteInputs then
   begin
     CheckXForFit(X);
-    CheckYForFit(y);
   end;
 
   fXTrain := X.Clone;
@@ -8701,6 +8682,7 @@ begin
     ArgumentError(ER_EMPTY_DATASET);
 
   var Xt := X;
+  var yVec: Vector := nil;
 
   for var i := 0 to fTransformers.Count - 1 do
   begin
@@ -8709,8 +8691,12 @@ begin
     if t = nil then
       ArgumentError(ER_PIPELINE_STEP_NULL);
 
-    if t is ISupervisedTransformer then
-      ArgumentError(ER_PIPELINE_INVALID_STEP_ORDER)
+    if t is ISupervisedTransformer(var sup) then
+    begin
+      if yVec = nil then
+        yVec := new Vector(y);
+      fTransformers[i] := sup.Fit(Xt, yVec);
+    end
     else if t is IUnsupervisedTransformer(var unsup) then
       fTransformers[i] := unsup.Fit(Xt)
     else

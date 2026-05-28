@@ -19,8 +19,7 @@ begin
   var (trainDf, testDf) := df.TrainTestSplit(0.2, seed := 42);
 
   var prep :=
-    DataPipeline.BuildPreprocessing(
-      TaskKind.tkRegression,
+    DataPipeline.BuildRegressionPreprocessing(
       target,
       features,
       new OrdinalEncoder('model'),

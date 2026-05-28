@@ -1,4 +1,4 @@
-uses MLABC;
+﻿uses MLABC;
 uses TestHelpers in '..\TestHelpers.pas';
 
 begin
@@ -12,8 +12,7 @@ begin
   testDf.AddStrColumn('Target', Arr('cat', 'fox'));
   testDf := testDf.SetCategorical(['Target']);
 
-  var pipe := DataPipeline.Build(
-    TaskKind.tkClassification,
+  var pipe := DataPipeline.BuildClassification(
     'Target',
     Arr($'X'),
     new LogisticRegression
@@ -24,3 +23,4 @@ begin
   CheckRaises(procedure -> begin var y := pipe.GetEncodedLabels(testDf); end,
     'GetEncodedLabels must reject unseen target classes');
 end.
+

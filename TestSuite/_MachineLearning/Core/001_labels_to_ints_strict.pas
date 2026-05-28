@@ -1,15 +1,21 @@
-uses MLABC;
+﻿uses MLABC;
 uses TestHelpers in '..\TestHelpers.pas';
 
 begin
-  var y := new Vector(Arr(0.0, 0.9999999999999, 2.0000000000001));
-  var labels := LabelsToInts(y);
+  var ds := new Dataset;
+  ds.Task := TaskType.Classification;
+  ds.Target := 'Target';
+  ds.Data := new DataFrame;
+  ds.Data.AddStrColumn('Target', Arr('cat', 'dog', 'cat'));
 
-  Check(labels.Length = 3, 'Length mismatch');
-  Check(labels[0] = 0, 'First label mismatch');
-  Check(labels[1] = 1, 'Second label mismatch');
-  Check(labels[2] = 2, 'Third label mismatch');
+  var enc := new LabelEncoder;
+  var y := enc.FitTransform(ds);
 
-  var bad := new Vector(Arr(0.0, 1.2, 2.0));
-  CheckRaises(procedure -> begin var tmp := LabelsToInts(bad); end, 'LabelsToInts must reject non-integer labels');
+  Check(y.Length = 3, 'Length mismatch');
+  Check(y[0] = 0, 'First label mismatch');
+  Check(y[1] = 1, 'Second label mismatch');
+  Check(y[2] = 0, 'Third label mismatch');
+  Check(enc.Classes.Length = 2, 'Class count mismatch');
+  Check(enc.Classes[0] = 'cat', 'First class mismatch');
+  Check(enc.Classes[1] = 'dog', 'Second class mismatch');
 end.

@@ -1,4 +1,4 @@
-uses MLABC;
+﻿uses MLABC;
 uses TestHelpers in '..\TestHelpers.pas';
 
 begin
@@ -7,8 +7,7 @@ begin
   var (trainDf, testDf) := df.TrainTestSplit(0.2, seed := 3);
 
   var pipe :=
-    DataPipeline.Build(
-      TaskKind.tkClassification,
+    DataPipeline.BuildClassification(
       ds.Target,
       ds.Features,
       new StandardScaler,
@@ -30,3 +29,4 @@ begin
     Check((pi >= 0) and (pi < classes.Length), $'Predict[{i}] out of dense class range');
   end;
 end.
+

@@ -1,4 +1,4 @@
-uses MLABC, PreprocessorABC;
+﻿uses MLABC, PreprocessorABC;
 uses TestHelpers in '..\TestHelpers.pas';
 
 type
@@ -32,7 +32,7 @@ end;
 
 begin
   var ds := Datasets.Iris;
-  var pipe := UDataPipeline.Build(
+  var pipe := DataPipeline.BuildClustering(
     ds.Features,
     new BadDropper,
     new KMeans(3, seed := 1)
@@ -41,3 +41,4 @@ begin
   CheckRaises(procedure -> begin var labels := pipe.FitPredict(ds.Data); end,
     'UDataPipeline must reject DataFrame preprocessors that change RowCount');
 end.
+

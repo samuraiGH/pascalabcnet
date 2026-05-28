@@ -1,4 +1,4 @@
-uses MLABC;
+﻿uses MLABC;
 uses TestHelpers in '..\TestHelpers.pas';
 
 begin
@@ -6,8 +6,7 @@ begin
   var df := ds.Data;
 
   var pipe :=
-    DataPipeline.Build(
-      TaskKind.tkClassification,
+    DataPipeline.BuildClassification(
       ds.Target,
       ds.Features,
       new StandardScaler,
@@ -24,3 +23,4 @@ begin
   Check(proba.ColCount = classes.Length, 'Probability class count mismatch');
   CheckProbabilityRowsSumToOne(proba);
 end.
+

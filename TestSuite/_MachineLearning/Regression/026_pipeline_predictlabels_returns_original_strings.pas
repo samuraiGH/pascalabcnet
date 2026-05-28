@@ -1,4 +1,4 @@
-uses MLABC;
+﻿uses MLABC;
 uses TestHelpers in '..\TestHelpers.pas';
 
 begin
@@ -7,8 +7,7 @@ begin
   var (trainDf, testDf) := df.TrainTestSplit(0.2, seed := 3);
 
   var pipe :=
-    DataPipeline.Build(
-      TaskKind.tkClassification,
+    DataPipeline.BuildClassification(
       ds.Target,
       ds.Features,
       new StandardScaler,
@@ -25,3 +24,4 @@ begin
   for var i := 0 to labels.Length - 1 do
     Check(labels[i] in classes, $'PredictLabels[{i}] must be one of pipeline class labels');
 end.
+

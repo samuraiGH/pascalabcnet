@@ -1,4 +1,4 @@
-uses MLABC;
+﻿uses MLABC;
 
 begin
   var ds := Datasets.TitanicRu;
@@ -11,8 +11,7 @@ begin
     df.StratifiedTrainTestSplit(ds.Target, testRatio := 0.2, seed := 42);
 
   var prep :=
-    DataPipeline.BuildPreprocessing(
-      TaskKind.tkClassification,
+    DataPipeline.BuildClassificationPreprocessing(
       target,
       features,
       new Imputer(['Возраст']),

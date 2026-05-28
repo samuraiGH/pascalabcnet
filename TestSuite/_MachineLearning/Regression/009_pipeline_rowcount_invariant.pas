@@ -1,4 +1,4 @@
-uses MLABC, PreprocessorABC;
+﻿uses MLABC, PreprocessorABC;
 uses TestHelpers in '..\TestHelpers.pas';
 
 type
@@ -32,8 +32,7 @@ end;
 
 begin
   var ds := Datasets.Iris;
-  var pipe := DataPipeline.Build(
-    TaskKind.tkClassification,
+  var pipe := DataPipeline.BuildClassification(
     ds.Target,
     ds.Features,
     new BadDropper,
@@ -43,3 +42,4 @@ begin
   CheckRaises(procedure -> begin pipe.Fit(ds.Data); end,
     'Pipeline must reject DataFrame preprocessors that change RowCount');
 end.
+

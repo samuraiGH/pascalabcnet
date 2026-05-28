@@ -1,4 +1,4 @@
-uses MLABC;
+﻿uses MLABC;
 uses TestHelpers in '..\TestHelpers.pas';
 
 begin
@@ -6,6 +6,6 @@ begin
   var yPred := new Vector(Arr(real.NaN, 1.0));
 
   CheckRaises(procedure -> begin
-    var a := Metrics.Accuracy(yTrue, yPred);
+    var a := Metrics.Accuracy(yTrue.ToIntArray, yPred.ToIntArray);
   end, 'Accuracy must reject NaN and Infinity in class labels');
 end.

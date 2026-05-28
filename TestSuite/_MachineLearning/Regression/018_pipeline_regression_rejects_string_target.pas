@@ -1,4 +1,4 @@
-uses MLABC;
+﻿uses MLABC;
 uses TestHelpers in '..\TestHelpers.pas';
 
 begin
@@ -7,8 +7,7 @@ begin
   df.AddStrColumn('Target', Arr('low', 'mid', 'high'));
   df := df.SetCategorical(['Target']);
 
-  var pipe := DataPipeline.Build(
-    TaskKind.tkRegression,
+  var pipe := DataPipeline.BuildRegression(
     'Target',
     Arr($'X'),
     new LinearRegression
@@ -17,3 +16,4 @@ begin
   CheckRaises(procedure -> begin pipe.Fit(df); end,
     'Regression pipeline must reject non-numeric target');
 end.
+

@@ -38,7 +38,7 @@ type
     /// Возвращает только те столбцы, которые реально присутствуют в current,
     /// без повторов и в итоговом порядке для построения матрицы признаков.
     ///
-    /// Если после preprocessing не осталось ни одного признака,
+    /// Если после предобработки не осталось ни одного признака,
     /// выбрасывается исключение
     function ResolveFinalFeatures(current: DataFrame): array of string;
 
@@ -116,8 +116,8 @@ type
 
     /// Добавляет шаг в конец конвейера.
     /// Принимает:
-    ///   • IPreprocessor (DataFrame-уровень)
-    ///   • ITransformer (Matrix-уровень)
+    ///   • IPreprocessor (табличный шаг)
+    ///   • ITransformer (матричный шаг)
     ///   • IModel (модель, должна быть последней)
     /// Запрещено добавлять шаги после вызова Fit.
     function Add(step: IPipelineStep): SupervisedDataPipelineBase;
@@ -126,7 +126,7 @@ type
     ///
     /// Матричные шаги и модель при этом не используются.
     /// Метод предназначен в основном для просмотра и анализа промежуточного
-    /// результата preprocessing.
+    /// результата предобработки.
     ///
     /// Полученный DataFrame обычно не следует повторно подавать в тот же pipeline,
     /// так как DataFrame-преобразования будут выполнены ещё раз.
@@ -169,22 +169,17 @@ type
   end;
   
   /// Общая база для табличных конвейеров без учителя.
-  /// 
-  /// UnsupervisedDataPipelineBase — конвейер подготовки данных и обучения модели без учителя на DataFrame.
-  /// 
-  /// Поддерживает два уровня шагов:
-  ///   • DataFrame-уровень: IPreprocessor (Fit/Transform над DataFrame)
-  ///   • Matrix-уровень: IUnsupervisedTransformer и IUnsupervisedModel
-  ///     (после преобразования DataFrame → Matrix)
   ///
-  /// Правила порядка шагов:
-  ///   • Сначала идут только DataFrame-шаги (IPreprocessor).
-  ///   • Затем — матричные шаги (IUnsupervisedTransformer).
-  ///   • Модель (IUnsupervisedModel) добавляется последней и может быть только одна.
+  /// Поддерживает два типа шагов:
+  ///   • табличные преобразователи;
+  ///   • матричные преобразователи и финальную модель без учителя.
   ///
-  /// В конвейере используются:
-  ///   • features — признаки (целевая переменная отсутствует).
+  /// Порядок шагов строгий:
+  ///   • сначала идут табличные преобразователи;
+  ///   • затем матричные преобразователи;
+  ///   • модель без учителя добавляется последней и может быть только одна.
   ///
+  /// Конвейер работает только с признаками.
   UnsupervisedDataPipelineBase = class(PipelineBase, IModel)
   protected
     fModel: IUnsupervisedModel;
@@ -202,8 +197,8 @@ type
   
     /// Добавляет шаг в конец конвейера.
     /// Принимает:
-    ///   • IPreprocessor (DataFrame-уровень)
-    ///   • ITransformer (Matrix-уровень)
+    ///   • IPreprocessor (табличный шаг)
+    ///   • ITransformer (матричный шаг)
     ///   • IUnsupervisedModel (модель, должна быть последней)
     function Add(step: IPipelineStep): UnsupervisedDataPipelineBase;
 
@@ -211,7 +206,7 @@ type
     ///
     /// Матричные шаги и модель при этом не используются.
     /// Метод предназначен в основном для просмотра и анализа промежуточного
-    /// результата preprocessing.
+    /// результата предобработки.
     ///
     /// Полученный DataFrame обычно не следует повторно подавать в тот же pipeline,
     /// так как DataFrame-преобразования будут выполнены ещё раз.
@@ -226,7 +221,7 @@ type
   end;  
 
   /// Табличный конвейер для задачи кластеризации.
-  /// Predict возвращает внутренние индексы кластеров.
+  /// Predict возвращает номера кластеров.
   ClusteringDataPipeline = class(UnsupervisedDataPipelineBase)
   public
     function WithModel(model: IUnsupervisedModel): ClusteringDataPipeline;
@@ -234,7 +229,7 @@ type
     /// Обучает конвейер и сразу возвращает метки кластеров.
     function FitPredict(df: DataFrame): array of integer;
     /// Делает предсказание кластеров для объектов из DataFrame.
-    /// Возвращает внутренние индексы кластеров.
+    /// Возвращает номера кластеров.
     function Predict(df: DataFrame): array of integer;
   end;
   
@@ -280,9 +275,11 @@ const
   ER_PIPELINE_FINALFEATURES =
     'Внутренняя ошибка pipeline: итоговый набор признаков не определён. Возможно, Fit не был выполнен корректно!!Pipeline internal error: final feature set is not defined. Fit may not have been executed correctly';    
   ER_PIPELINE_TARGET_REMOVED =
-    'Целевая переменная "{0}" была удалена на этапе preprocessing pipeline!!Target column "{0}" was removed during pipeline preprocessing';  
+    'Целевая переменная "{0}" была удалена на этапе предобработки конвейера!!' +
+    'Target column "{0}" was removed during pipeline preprocessing';  
   ER_PIPELINE_NO_FEATURES =
-    'После preprocessing pipeline не осталось признаков для обучения модели!!No features remain after pipeline preprocessing';    
+    'После предобработки конвейера не осталось признаков для обучения модели!!' +
+    'No features remain after pipeline preprocessing';    
   ER_MATRIXSTEP_NO_FIT =
     'Шаг матричного конвейера #{0} не поддерживает Fit!!Matrix step #{0} does not support Fit'; 
   ER_Model_NoFit =
@@ -307,7 +304,8 @@ const
   ER_LABEL_INDEX_OUT_OF_RANGE =
     'Индекс метки {0} вне диапазона [0, {1})!!Label index {0} is out of range [0, {1})';
   ER_ORDINALENCODER_TARGET_NOT_ALLOWED =
-    'OrdinalEncoder нельзя применять к целевой переменной — кодирование выполняется внутри модели!!OrdinalEncoder cannot be applied to target — encoding is handled internally by the model';
+    'OrdinalEncoder нельзя применять к целевой переменной: её кодирование выполняется внутри модели!!' +
+    'OrdinalEncoder cannot be applied to the target because target encoding is handled inside the model';
   ER_ENCODELABELS_NOT_CATEGORICAL =
     'Целевой столбец должен быть категориальным для задач классификации!!Target column must be categorical for classification tasks';
   ER_CLASSIFICATION_TARGET_MUST_BE_CATEGORICAL_STR_OR_INT =
@@ -327,13 +325,13 @@ const
     'Pipeline не содержит шагов!!' +
     'Pipeline must contain at least one step';  
   ER_PIPELINE_LAST_NOT_UNSUPERVISED_MODEL =
-    'Последний шаг Pipeline должен быть unsupervised-моделью!!' +
+    'Последний шаг Pipeline должен быть моделью без учителя!!' +
     'Last Pipeline step must be an unsupervised model';  
   ER_PIPELINE_INVALID_STEP_ORDER =
     'Неверный порядок шагов в Pipeline: модель должна быть последней!!' +
     'Invalid pipeline step order: model must be the last step';
   ER_PIPELINE_LAST_NOT_SUPERVISED_MODEL =
-    'Последний шаг Pipeline должен быть supervised-моделью!!' +
+    'Последний шаг Pipeline должен быть моделью с учителем!!' +
     'Last Pipeline step must be a supervised model';
   ER_MODEL_NOT_CLASSIFIER =
     'Модель не является классификатором!!' +

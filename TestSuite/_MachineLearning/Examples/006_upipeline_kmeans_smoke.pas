@@ -1,11 +1,11 @@
-uses MLABC;
+﻿uses MLABC;
 uses TestHelpers in '..\TestHelpers.pas';
 
 begin
   var ds := Datasets.Iris;
 
   var pipe :=
-    UDataPipeline.Build(
+    DataPipeline.BuildClustering(
       ds.Features,
       new StandardScaler,
       new KMeans(3, seed := 1)
@@ -15,3 +15,4 @@ begin
 
   Check(labels.Length = ds.Data.RowCount, 'UDataPipeline labels length mismatch');
 end.
+

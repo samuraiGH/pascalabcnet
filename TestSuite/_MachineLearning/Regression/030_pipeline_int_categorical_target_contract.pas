@@ -1,4 +1,4 @@
-uses MLABC;
+﻿uses MLABC;
 uses TestHelpers in '..\TestHelpers.pas';
 
 begin
@@ -7,8 +7,7 @@ begin
   df.AddIntColumn('Target', Arr(10, 20, 10, 20));
   df := df.SetCategorical(['Target']);
 
-  var pipe := DataPipeline.Build(
-    TaskKind.tkClassification,
+  var pipe := DataPipeline.BuildClassification(
     'Target',
     Arr($'X'),
     new LogisticRegression
@@ -39,3 +38,4 @@ begin
     Check(predLabels[i] = classes[pi], $'PredictLabels[{i}] mismatch');
   end;
 end.
+

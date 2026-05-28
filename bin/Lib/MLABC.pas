@@ -22,12 +22,15 @@ unit MLABC;
 // =============================================================
 
 // =============================================================
-// PIPELINES
+// КОНВЕЙЕРЫ
 //
-// DataFrame-based:
+// Табличные:
 //   DataPipeline
+//   ClassificationDataPipeline
+//   RegressionDataPipeline
+//   ClusteringDataPipeline
 //
-// Matrix/Vector-based:
+// Матричные:
 //   MatrixPipeline
 //   ClassificationMatrixPipeline
 //   RegressionMatrixPipeline
@@ -35,6 +38,24 @@ unit MLABC;
 //
 // DataPipeline и MatrixPipeline используются как фасады
 // для построения специализированных конвейеров.
+// =============================================================
+
+// =============================================================
+// ПОЛИТИКА PREDICT
+//
+// 1. Классификация:
+//    • Predict возвращает метки классов в том же виде,
+//      в каком они были поданы модели при обучении.
+//    • PredictLabels возвращает строковые метки классов.
+//
+// 2. Регрессия:
+//    • Predict возвращает вектор числовых предсказаний.
+//
+// 3. Кластеризация:
+//    • Predict и FitPredict возвращают номера кластеров.
+//
+// Внутреннее кодирование классов может использоваться внутри модели,
+// но наружу через Predict оно не выдаётся.
 // =============================================================
 
 interface 
@@ -68,6 +89,9 @@ type
   ConfusionMatrix = MetricsABC.ConfusionMatrix;
   
   DataPipeline = MLPipelineABC.DataPipeline;
+  ClassificationDataPipeline = MLPipelineABC.ClassificationDataPipeline;
+  RegressionDataPipeline = MLPipelineABC.RegressionDataPipeline;
+  ClusteringDataPipeline = MLPipelineABC.ClusteringDataPipeline;
   
   DataFrame = DataFrameABC.DataFrame;
   DataFrameCursor = DataFrameABCCore.DataFrameCursor;
@@ -134,6 +158,7 @@ type
   Datasets = MLDatasets.Datasets;
   Dataset = MLDatasets.Dataset;
   LabelEncoder = MLDatasets.LabelEncoder;
+  TaskType = MLDatasets.TaskType;
   
   IModel = MLCoreABC.IModel;
   IUnsupervisedModel = MLCoreABC.IUnsupervisedModel;

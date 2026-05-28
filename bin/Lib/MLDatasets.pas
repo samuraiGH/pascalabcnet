@@ -351,7 +351,7 @@ const
   ER_VALUECOUNTS_ONLY_CLASSIFICATION =
     'ValueCounts доступны только для задач классификации!!ValueCounts are only available for classification datasets';    
   ER_DATASET_TARGET_MISSING =
-    'Target обязателен для задач обучения с учителем!!Target is required for supervised learning datasets'; 
+    'Target обязателен для задач с учителем!!Target is required for supervised learning datasets'; 
   ER_PARAM_LE =
     'Параметр {0} должен быть <= допустимого максимума!!Parameter {0} must be <= the allowed maximum value';
   ER_PARAM_RANGE_01 =

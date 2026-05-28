@@ -32,9 +32,9 @@ begin
 
   var pred := pipe.Predict(testDf);
   var y := pipe.GetEncodedLabels(testDf);
-  var predInt := pred.ToIntArray;
-  var yInt := y.ToIntArray;
+  var testPrepared := pipe.Transform(testDf);
   var cur := testFull.GetCursor;
+  var curPrepared := testPrepared.GetCursor;
 
   Println('TitanicRu: пассажиры, классифицированные неправильно');
   Println;
@@ -42,19 +42,22 @@ begin
   var shown := 0;
   while cur.MoveNext do
   begin
+    if not curPrepared.MoveNext then
+      break;
+
     var i := cur.Position;
-    if yInt[i] <> predInt[i] then
+    if y[i] <> pred[i] then
     begin
       var id := cur.Int('Id');
       var name := cur.Str('Имя');
       var sex := cur.Str('Пол');
       var pclass := cur.Int('Класс');
-      var age := cur.Float('Возраст');
+      var age := curPrepared.Float('Возраст');
       var fare := cur.Float('ЦенаБилета');
       
       Println($'Id={id}, {name}');
       Println($'  Пол={sex}, класс={pclass}, возраст={age:F1}, билет={fare:F1}');
-      Println($'  Истина: {LabelText(yInt[i])}, прогноз: {LabelText(predInt[i])}');
+      Println($'  Истина: {LabelText(y[i])}, прогноз: {LabelText(pred[i])}');
       Println;
 
       shown += 1;

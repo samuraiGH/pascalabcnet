@@ -1,6 +1,6 @@
-uses MLABC;
+﻿uses MLABC;
 
-function BuildPipe(features: array of string): DataPipeline;
+function BuildPipe(features: array of string): ClassificationDataPipeline;
 begin
   Result :=
     DataPipeline.BuildClassification(

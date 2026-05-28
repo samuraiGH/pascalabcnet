@@ -1,4 +1,4 @@
-uses MLABC;
+﻿uses MLABC;
 uses TestHelpers in '..\TestHelpers.pas';
 
 begin
@@ -7,7 +7,7 @@ begin
   X[2,0] := 1.0;  X[3,0] := 1.1;
   X[4,0] := 2.0;  X[5,0] := 2.1;
 
-  var y := new Vector(Arr(10.0, 10.0, 20.0, 20.0, 30.0, 30.0));
+  var y := Arr(10, 10, 20, 20, 30, 30);
 
   var model := new LogisticRegression;
   model.Fit(X, y);
@@ -20,9 +20,8 @@ begin
 
   for var i := 0 to X.RowCount - 1 do
   begin
-    var pi := Round(pred[i]);
+    var pi := pred[i];
     Check((pi = 10) or (pi = 20) or (pi = 30), $'Predict[{i}] must return original class label');
-    Check((labels[i] >= 0) and (labels[i] < classes.Length), $'PredictLabels[{i}] out of range');
-    Check(classes[labels[i]] = pi.ToString, $'PredictLabels[{i}] must point to Predict[{i}]');
+    Check(labels[i] = pi.ToString, $'PredictLabels[{i}] must match Predict[{i}]');
   end;
 end.
