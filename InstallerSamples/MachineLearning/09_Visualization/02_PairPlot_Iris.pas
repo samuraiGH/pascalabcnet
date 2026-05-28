@@ -22,5 +22,5 @@ begin
   Println('На диагонали показаны гистограммы признаков.');
   Println('Вне диагонали показаны scatter plot для всех пар признаков.');
 
-  Plot.PairPlot(X, LabelsToInts(y), ds.Features);
+  Plot.PairPlot(X, y, ds.Features);
 end.

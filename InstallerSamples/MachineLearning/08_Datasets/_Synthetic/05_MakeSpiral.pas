@@ -12,5 +12,5 @@ begin
   );
   
   Plot.Title := 'MakeSpiral синтетический датасет';
-  Plot.Points(X.Col(0), X.Col(1), LabelsToInts(y), size := 5);
+  Plot.Points(X.Col(0), X.Col(1), y, size := 5);
 end.

@@ -23,14 +23,14 @@ begin
 
   // Строим matrix pipeline:
   // сначала StandardScaler, затем KMeans.
-  var pipe := UMatrixPipeline.Build(
+  var pipe := MatrixPipeline.BuildClustering(
     new StandardScaler,
     new KMeans(3, seed := 42)
   );
 
   // Обучаем pipeline и получаем метки кластеров.
   pipe.Fit(X);
-  var labels := LabelsToInts(pipe.Predict(X));
+  var labels := pipe.Predict(X);
 
   // Добавляем метки кластеров в таблицу,
   // чтобы потом удобно вывести представителей каждого кластера.

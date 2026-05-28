@@ -32,10 +32,10 @@ type
   /// Для каждого признака случайно перемешивает соответствующий столбец
   /// и измеряет снижение качества модели по заданной функции scoreFunc.
   /// 
-  /// Требует модель, поддерживающую предсказания (IPredictiveModel).
+  /// Текущая версия предназначена для регрессионных моделей.
   /// 
   /// Параметры:
-  ///   • model — обученная модель, реализующая IPredictiveModel;
+  ///   • model — обученная регрессионная модель;
   ///   • X — матрица признаков (nSamples × nFeatures);
   ///   • y — вектор истинных значений;
   ///   • scoreFunc — функция оценки качества (например, MSE, Accuracy);
@@ -44,9 +44,31 @@ type
   /// Возвращает:
   ///   Вектор важностей признаков длины nFeatures.
   ///   Чем больше значение, тем сильнее признак влияет на качество модели
-    static function PermutationImportance(model: IPredictiveModel; X: Matrix; y: Vector;
+    static function PermutationImportance(model: IRegressor; X: Matrix; y: Vector;
       scoreFunc: (Vector, Vector) -> real; 
       nRepeats: integer := 5; 
+      higherIsBetter: boolean := True;
+      seed: integer := -1): Vector;
+
+  /// PermutationImportance — оценка важности признаков методом перестановок.
+  ///
+  /// Текущая версия предназначена для классификационных моделей.
+  /// Для каждого признака случайно перемешивает соответствующий столбец
+  /// и измеряет снижение качества модели по заданной функции scoreFunc.
+  ///
+  /// Параметры:
+  ///   • model — обученная классификационная модель;
+  ///   • X — матрица признаков (nSamples × nFeatures);
+  ///   • y — массив истинных меток классов;
+  ///   • scoreFunc — функция оценки качества (например, Accuracy);
+  ///   • seed — начальное значение генератора случайных чисел.
+  ///
+  /// Возвращает:
+  ///   Вектор важностей признаков длины nFeatures.
+  ///   Чем больше значение, тем сильнее признак влияет на качество модели
+    static function PermutationImportance(model: IClassifier; X: Matrix; y: array of integer;
+      scoreFunc: (array of integer, array of integer) -> real;
+      nRepeats: integer := 5;
       higherIsBetter: boolean := True;
       seed: integer := -1): Vector;
   end;  
@@ -64,7 +86,7 @@ const
 
 
 static function Inspection.PermutationImportance(
-  model: IPredictiveModel; 
+  model: IRegressor; 
   X: Matrix; y: Vector;
   scoreFunc: (Vector, Vector) -> real; 
   nRepeats: integer;
@@ -108,6 +130,71 @@ begin
       var rnd := new System.Random(runSeed);
 
       // --- shuffle столбца j (Fisher–Yates)
+      for var i := n - 1 downto 1 do
+      begin
+        var k := rnd.Next(i + 1);
+        var tmp := Xperm[i,j];
+        Xperm[i,j] := Xperm[k,j];
+        Xperm[k,j] := tmp;
+      end;
+
+      var permPred := model.Predict(Xperm);
+      var permScore := scoreFunc(y, permPred);
+
+      if higherIsBetter then
+        acc += (baselineScore - permScore)
+      else
+        acc += (permScore - baselineScore);
+    end;
+
+    resultVec[j] := acc / nRepeats;
+  end;
+
+  Result := resultVec;
+end;
+
+static function Inspection.PermutationImportance(
+  model: IClassifier;
+  X: Matrix; y: array of integer;
+  scoreFunc: (array of integer, array of integer) -> real;
+  nRepeats: integer;
+  higherIsBetter: boolean;
+  seed: integer): Vector;
+begin
+  if model = nil then
+    ArgumentNullError(ER_MODEL_NULL);
+
+  if scoreFunc = nil then
+    ArgumentNullError(ER_SCORE_FUNC_NULL);
+
+  if X.RowCount <> y.Length then
+    DimensionError(ER_DIM_MISMATCH, X.RowCount, y.Length);
+
+  if nRepeats < 1 then
+    ArgumentOutOfRangeError(ER_ARG_OUT_OF_RANGE, 'nRepeats', nRepeats);
+
+  var baselinePred := model.Predict(X);
+  var baselineScore := scoreFunc(y, baselinePred);
+
+  var n := X.RowCount;
+  var p := X.ColCount;
+
+  var resultVec := new Vector(p);
+
+  var userProvidedSeed: boolean;
+  var baseSeed := ResolveRandomSeed(seed, userProvidedSeed);
+
+  for var j := 0 to p - 1 do
+  begin
+    var acc := 0.0;
+
+    for var r := 0 to nRepeats - 1 do
+    begin
+      var Xperm := X.Clone;
+
+      var runSeed := baseSeed + j * 100000 + r;
+      var rnd := new System.Random(runSeed);
+
       for var i := n - 1 downto 1 do
       begin
         var k := rnd.Next(i + 1);

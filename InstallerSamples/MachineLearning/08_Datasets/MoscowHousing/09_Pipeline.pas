@@ -11,8 +11,7 @@ begin
   var (trainDf, testDf) := df.TrainTestSplit(0.2, seed := 42);
 
   var pipe :=
-    DataPipeline.Build(
-      TaskKind.tkRegression,
+    DataPipeline.BuildRegression(
       target,
       features,
       new OneHotEncoder('renovation'),

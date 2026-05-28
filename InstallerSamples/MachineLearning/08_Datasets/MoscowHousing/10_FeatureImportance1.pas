@@ -10,8 +10,7 @@ begin
   var model := new RandomForestRegressor(seed := 42);
 
   var pipe :=
-    DataPipeline.Build(
-      TaskKind.tkRegression,
+    DataPipeline.BuildRegression(
       target,
       features,
       new OrdinalEncoder('renovation'),

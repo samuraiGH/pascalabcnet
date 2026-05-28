@@ -10,8 +10,7 @@ begin
     df.StratifiedTrainTestSplit(ds.Target, testRatio := 0.2, seed := 42);
 
   var pipe :=
-    DataPipeline.Build(
-      TaskKind.tkClassification,
+    DataPipeline.BuildClassification(
       'Выжил',
       features,
       new Imputer(['Возраст']),

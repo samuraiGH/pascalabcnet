@@ -10,7 +10,7 @@ begin
     seed := 1
   );
 
-  Plot.Title('MakeCircles синтетический датасет');
+  Plot.Title := 'MakeCircles синтетический датасет';
 
-  Plot.Points(X.Col(0), X.Col(1), LabelsToInts(y), size := 3);
+  Plot.Points(X.Col(0), X.Col(1), y, size := 3);
 end.

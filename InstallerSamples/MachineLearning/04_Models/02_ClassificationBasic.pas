@@ -1,4 +1,4 @@
-// Базовый пример логистической регрессии на датасете Iris.
+﻿// Базовый пример логистической регрессии на датасете Iris.
 //
 // Iris - удобный учебный датасет для первого знакомства с классификацией:
 // классы в нём разделяются достаточно хорошо, поэтому простая линейная модель
@@ -13,7 +13,7 @@ begin
   var y := df.EncodeLabels(ds.Target);
 
   var (Xtrain, Xtest, ytrain, ytest) :=
-    Validation.TrainTestSplit(X, y, testRatio := 0.2, seed := 1);
+    Validation.TrainTestSplit(X, y, testRatio := 0.2, seed := 2);
 
   var model := new LogisticRegression;
   model.Fit(Xtrain, ytrain);
@@ -25,7 +25,7 @@ begin
   Println;
   Println('Вероятности для первого объекта:');
 
-  var classes := model.GetClasses;
+  var classes := ds.Classes;
   for var j := 0 to classes.Length - 1 do
-    Println($'Класс {classes[j]:F0}: {proba[0, j]:F3}');
+    Println($'Класс {classes[j]}: {proba[0, j]:F3}');
 end.

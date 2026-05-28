@@ -17,8 +17,7 @@ begin
   var testDf := testFull.Drop(['Id', 'Имя']);
 
   var pipe :=
-    DataPipeline.Build(
-      TaskKind.tkClassification,
+    DataPipeline.BuildClassification(
       ds.Target,
       features,
       new Imputer(['Возраст']),

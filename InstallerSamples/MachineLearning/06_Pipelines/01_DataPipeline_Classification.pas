@@ -17,8 +17,7 @@ begin
   var (trainDf, testDf) := df.TrainTestSplit(0.2, seed := 3);
 
   var pipe :=
-    DataPipeline.Build(
-      TaskKind.tkClassification,
+    DataPipeline.BuildClassification(
       ds.Target,
       ds.Features,
       new StandardScaler,

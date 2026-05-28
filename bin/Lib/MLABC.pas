@@ -26,14 +26,15 @@ unit MLABC;
 //
 // DataFrame-based:
 //   DataPipeline
-//   UDataPipeline
 //
 // Matrix/Vector-based:
 //   MatrixPipeline
-//   UMatrixPipeline
+//   ClassificationMatrixPipeline
+//   RegressionMatrixPipeline
+//   ClusteringMatrixPipeline
 //
-// Оба варианта являются равноправными и используются
-// в зависимости от представления данных.
+// DataPipeline и MatrixPipeline используются как фасады
+// для построения специализированных конвейеров.
 // =============================================================
 
 interface 
@@ -79,6 +80,7 @@ type
   GroupView = DataFrameABC.GroupView;
   
   IProbabilisticClassifier = MLCoreABC.IProbabilisticClassifier;
+  IClassifier = MLCoreABC.IClassifier;
   IRegressor = MLCoreABC.IRegressor;
 
   StandardScaler = MLModelsABC.StandardScaler;
@@ -93,6 +95,9 @@ type
   
   Activations = MLModelsABC.Activations;
   MatrixPipeline = MLModelsABC.MatrixPipeline;
+  ClassificationMatrixPipeline = MLModelsABC.ClassificationMatrixPipeline;
+  RegressionMatrixPipeline = MLModelsABC.RegressionMatrixPipeline;
+  ClusteringMatrixPipeline = MLModelsABC.ClusteringMatrixPipeline;
   
   LinearRegression = MLModelsABC.LinearRegression;
   LogisticRegression = MLModelsABC.LogisticRegression;
@@ -131,11 +136,8 @@ type
   LabelEncoder = MLDatasets.LabelEncoder;
   
   IModel = MLCoreABC.IModel;
-  ISupervisedModel = MLCoreABC.ISupervisedModel;
   IUnsupervisedModel = MLCoreABC.IUnsupervisedModel;
   
-  UMatrixPipeline = MLModelsABC.UMatrixPipeline;
-  UDataPipeline = MLPipelineABC.UDataPipeline;
   TaskKind = MLPipelineABC.TaskKind;
   
   AggregationKind = DataFrameABC.AggregationKind;
@@ -154,11 +156,6 @@ const
   jkRight = JoinKind.jkRight;
   jkFull = JoinKind.jkFull;
 
-  /// Преобразует вектор меток классов в массив целых чисел.
-  /// Значения округляются функцией Round, чтобы устранить
-  ///   возможные небольшие численные ошибки 
-  function LabelsToInts(y: Vector): array of integer;
-  
   /// Кодирует строковые метки классов в целочисленные индексы.
   /// Каждому уникальному значению присваивается номер 0,1,2,...
   /// Порядок кодирования соответствует порядку первого появления меток.
@@ -168,11 +165,6 @@ const
 
   
 implementation
-
-function LabelsToInts(y: Vector): array of integer;
-begin
-  Result := MLUtilsABC.LabelsToInts(y);
-end;
 
 function EncodeLabels(labels: array of string): array of integer := MLUtilsABC.EncodeLabels(labels);
   

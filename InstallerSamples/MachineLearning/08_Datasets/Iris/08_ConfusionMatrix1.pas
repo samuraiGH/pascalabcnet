@@ -7,8 +7,7 @@ begin
   var ds := Datasets.Iris;
   var (train, test) := ds.StratifiedTrainTestSplit(0.2, 42);
 
-  var pipe := DataPipeline.Build(
-    TaskKind.tkClassification,
+  var pipe := DataPipeline.BuildClassification(
     ds.Target,
     ds.Features,
     new StandardScaler,

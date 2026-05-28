@@ -1,6 +1,6 @@
 ﻿uses MLABC;
 
-procedure TestModel(model: ISupervisedModel; X: Matrix; y: Vector);
+procedure TestModel(model: IClassifier; X: Matrix; y: array of integer);
 begin
   var acc :=
     Validation.StratifiedCrossValidate(
@@ -21,7 +21,7 @@ begin
   var X := df.ToMatrix(ds.Features);
   var y := df.EncodeLabels(ds.Target);
 
-  var models: array of ISupervisedModel := (
+  var models: array of IClassifier := (
     new LogisticRegression,
     new DecisionTreeClassifier(seed := -1),
     new RandomForestClassifier(seed := -1),

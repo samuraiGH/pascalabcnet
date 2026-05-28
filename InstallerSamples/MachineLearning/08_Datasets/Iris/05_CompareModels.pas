@@ -1,6 +1,6 @@
 ﻿uses MLABC;
 
-procedure TestModel(model: ISupervisedModel; Xtrain, Xtest: Matrix; ytrain, ytest: Vector);
+procedure TestModel(model: IClassifier; Xtrain, Xtest: Matrix; ytrain, ytest: array of integer);
 begin
   model.Fit(Xtrain, ytrain);
 

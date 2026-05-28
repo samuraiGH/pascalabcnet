@@ -54,20 +54,6 @@ type
     property IsFitted: boolean read;
   end;
   
-  /// Модель, реализующая отображение X → y (или аналогичный результат).
-  /// Поддерживает предсказание для новых данных
-  IPredictiveModel = interface(IModel)
-    function Predict(X: Matrix): Vector;
-  end;
-  
-  /// Интерфейс модели с учителем (Supervised Model).
-  /// Наследуется от базового интерфейса IModel.
-  /// Предназначен для алгоритмов, обучающихся по признакам X
-  /// с использованием целевых значений (y)
-  ISupervisedModel = interface(IPredictiveModel)
-    function Fit(X: Matrix; y: Vector): ISupervisedModel;
-  end;
-  
   /// Интерфейс модели без учителя (Unsupervised Model).
   /// Наследуется от базового интерфейса IModel.
   /// Предназначен для алгоритмов, обучающихся только по признакам X
@@ -93,29 +79,36 @@ type
   /// Интерфейс кластеризатора, поддерживающего предсказание для новых данных.
   /// Используется для алгоритмов, задающих явное отображение X → cluster
   /// (например, KMeans через ближайший центр кластера)
-  IPredictiveClusterer = interface(IClusterer, IPredictiveModel)
-    /// Возвращает индекс кластера для каждого объекта из X
+  IPredictiveClusterer = interface(IClusterer)
+    /// Возвращает внутренний индекс кластера для каждого объекта из X
     /// без повторного обучения модели.
     /// Требует предварительного вызова Fit или FitPredict.
-    function PredictLabels(X: Matrix): array of integer;
+    function Predict(X: Matrix): array of integer;
   end;  
   
-  /// Интерфейс древовидной модели машинного обучения
-  ITreeModel = interface(ISupervisedModel)
+  /// Интерфейс древовидной модели машинного обучения.
+  /// Используется для моделей, которые умеют вычислять важность признаков.
+  ITreeModel = interface(IModel)
     function FeatureImportances: Vector;
   end;
 
   /// Интерфейс классификатора.
   /// Наследуется от IModel.
-    /// Предназначен для моделей, выполняющих классификацию (предсказание меток классов).
-    IClassifier = interface(ISupervisedModel)
-      /// Возвращает внутренние индексы классов (0,1,2,...).
-      /// Индекс i соответствует метке GetClassLabels[i].
-      function PredictLabels(X: Matrix): array of integer;
-      
-      /// Возвращает исходные метки классов в порядке внутреннего кодирования.
-      function GetClassLabels: array of string;
-    end;
+  /// Предназначен для моделей, выполняющих классификацию.
+  IClassifier = interface(IModel)
+    /// Обучает модель классификации на матрице признаков X
+    /// и целевых метках классов y.
+    function Fit(X: Matrix; y: array of integer): IClassifier;
+
+    /// Возвращает метки классов в том же виде, в каком они были поданы модели при обучении.
+    function Predict(X: Matrix): array of integer;
+
+    /// Возвращает исходные строковые метки классов для объектов из X.
+    function PredictLabels(X: Matrix): array of string;
+    
+    /// Возвращает строковые метки классов в порядке столбцов матрицы PredictProba.
+    function GetClassLabels: array of string;
+  end;
   
   IClassifierInternal = interface
     procedure SetClassLabels(classes: array of string);
@@ -140,7 +133,12 @@ type
   /// Интерфейс регрессионной модели.
   /// Наследуется от IModel.
   /// Предназначен для моделей, предсказывающих числовые значения.
-  IRegressor = interface(ISupervisedModel)
+  IRegressor = interface(IModel)
+    /// Обучает модель регрессии на матрице признаков X
+    /// и векторе целевых значений y.
+    function Fit(X: Matrix; y: Vector): IRegressor;
+
+    function Predict(X: Matrix): Vector;
   end;
   
   /// Базовый интерфейс преобразования признаков.

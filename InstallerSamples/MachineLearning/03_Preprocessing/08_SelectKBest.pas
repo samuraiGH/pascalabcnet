@@ -16,11 +16,12 @@ begin
   );
 
   var featureNames := ['f1', 'f2', 'f3', 'f4', 'f5', 'f6'];
+  var yInt := y;
 
   Println('Размер до SelectKBest: ', X.RowCount, 'x', X.ColCount);
 
   var skb := new SelectKBest(2, FeatureScore.Correlation);
-  skb.Fit(X, y);
+  skb.Fit(X, new Vector(y));
   var X2 := skb.Transform(X);
 
   Println('Размер после SelectKBest: ', X2.RowCount, 'x', X2.ColCount);
@@ -35,7 +36,7 @@ begin
 
   var fullScore := Validation.StratifiedCrossValidate(
     new LogisticRegression(learningRate := 0.05, epochs := 1000),
-    X, y,
+    X, yInt,
     5,
     ClassificationMetrics.Accuracy,
     seed := 42
@@ -43,7 +44,7 @@ begin
 
   var reducedScore := Validation.StratifiedCrossValidate(
     new LogisticRegression(learningRate := 0.05, epochs := 1000),
-    X2, y,
+    X2, yInt,
     5,
     ClassificationMetrics.Accuracy,
     seed := 42

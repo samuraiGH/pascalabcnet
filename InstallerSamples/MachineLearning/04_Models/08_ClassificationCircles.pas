@@ -53,10 +53,10 @@ begin
   knn.Fit(XTrain, yTrain);
 
   // --- метрики
-  var accLR   := Metrics.Accuracy(yTest, logreg.PredictLabels(XTest));
-  var accTree := Metrics.Accuracy(yTest, tree.PredictLabels(XTest));
-  var accRF   := Metrics.Accuracy(yTest, rf.PredictLabels(XTest));
-  var accKNN  := Metrics.Accuracy(yTest, knn.PredictLabels(XTest));
+  var accLR   := Metrics.Accuracy(yTest, logreg.Predict(XTest));
+  var accTree := Metrics.Accuracy(yTest, tree.Predict(XTest));
+  var accRF   := Metrics.Accuracy(yTest, rf.Predict(XTest));
+  var accKNN  := Metrics.Accuracy(yTest, knn.Predict(XTest));
 
   Println('--- Circles ---');
   Println($'Logistic  Acc: {accLR,0:F4}');
@@ -67,7 +67,7 @@ begin
   // --- данные для визуализации
   var x1 := X.Col(0);
   var x2 := X.Col(1);
-  var yArr := y.ToIntArray;
+  var yArr := y;
 
   var nx := 80;
   var ny := 80;
@@ -76,22 +76,22 @@ begin
   var fig := Plot.Grid(2, 2);
 
   // Logistic
-  fig[0,0].Surface(x1, x2, nx, ny, G -> logreg.PredictLabels(G),Palettes.Pastel);
+  fig[0,0].Surface(x1, x2, nx, ny, G -> logreg.Predict(G),Palettes.Pastel);
   fig[0,0].Points(x1, x2, yArr, size := 6);
   fig[0,0].Title := $'Logistic (acc={accLR,0:F3})';
 
   // Tree
-  fig[0,1].Surface(x1, x2, nx, ny, G -> tree.PredictLabels(G), Palettes.Pastel);
+  fig[0,1].Surface(x1, x2, nx, ny, G -> tree.Predict(G), Palettes.Pastel);
   fig[0,1].Points(x1, x2, yArr, size := 6);
   fig[0,1].Title := $'Tree (acc={accTree,0:F3})';
 
   // Forest
-  fig[1,0].Surface(x1, x2, nx, ny, G -> rf.PredictLabels(G), Palettes.Pastel);
+  fig[1,0].Surface(x1, x2, nx, ny, G -> rf.Predict(G), Palettes.Pastel);
   fig[1,0].Points(x1, x2, yArr, size := 6);
   fig[1,0].Title := $'Forest (acc={accRF,0:F3})';
 
   // KNN
-  fig[1,1].Surface(x1, x2, nx, ny, G -> knn.PredictLabels(G), Palettes.Pastel);
+  fig[1,1].Surface(x1, x2, nx, ny, G -> knn.Predict(G), Palettes.Pastel);
   fig[1,1].Points(x1, x2, yArr, size := 6);
   fig[1,1].Title := $'KNN (acc={accKNN,0:F3})';
 end.

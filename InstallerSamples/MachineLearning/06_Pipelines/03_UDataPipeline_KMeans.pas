@@ -20,7 +20,7 @@ begin
   var features := ['log_population', 'density'];
 
   var pipe :=
-    UDataPipeline.Build(
+    DataPipeline.BuildClustering(
       features,
       new StandardScaler,
       new KMeans(3, seed := 42)

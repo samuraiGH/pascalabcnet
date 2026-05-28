@@ -11,8 +11,7 @@ begin
   var (trainDf, testDf) := df.TrainTestSplit(0.2, seed := 42);
 
   var pipe :=
-    DataPipeline.Build( // сборка pipeline: target + features + шаги
-      TaskKind.tkRegression,
+    DataPipeline.BuildRegression( // сборка pipeline: target + features + шаги
       target,           // целевая переменная
       features,         // список признаков
       new OneHotEncoder('renovation'), // DataFrame-уровень: кодирование категории

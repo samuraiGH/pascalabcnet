@@ -40,7 +40,7 @@ begin
   model.Fit(X);
 
   // Получаем номер кластера для каждого города
-  var labels := model.PredictLabels(X);
+  var labels := model.Predict(X);
   
   // Получаем названия городов
   var cities := df.Str('city');

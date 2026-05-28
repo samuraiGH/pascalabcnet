@@ -5,8 +5,7 @@ begin
   var df := ds.Data;
 
   var pipe :=
-    DataPipeline.Build(
-      TaskKind.tkClassification,
+    DataPipeline.BuildClassification(
       ds.Target,
       ds.Features,
       new StandardScaler,     // Matrix transformer

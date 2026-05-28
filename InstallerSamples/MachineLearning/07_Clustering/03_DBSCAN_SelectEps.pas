@@ -22,9 +22,7 @@ begin
   foreach var eps in [0.10, 0.14, 0.18, 0.22, 0.26, 0.30] do
   begin
     var model := new DBSCAN(eps, 5);
-    model.Fit(X);
-
-    var labels := model.PredictLabels(X);
+    var labels := model.FitPredict(X);
 
     var noiseCount := 0;
     foreach var clusterLabel in labels do

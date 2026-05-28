@@ -22,7 +22,7 @@ begin
 
   // Строим pipeline:
   // StandardScaler -> LogisticRegression.
-  var pipe := MatrixPipeline.Build(
+  var pipe := MatrixPipeline.BuildClassification(
     new StandardScaler,
     new LogisticRegression(learningRate := 0.05, epochs := 1000)
   );

@@ -17,7 +17,7 @@ begin
   var km := new KMeans(5, seed := 42);
   km.Fit(X);
 
-  var labels: array of integer := km.PredictLabels(X);
+  var labels: array of integer := km.Predict(X);
   df.AddIntColumn('cluster', labels, nil);
 
   // --- координаты

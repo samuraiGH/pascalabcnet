@@ -12,7 +12,8 @@ type
 
 type
   DataPipeline = class;
-  UDataPipeline = class;
+  SupervisedDataPipelineBase = class;
+  UnsupervisedDataPipelineBase = class;
   ClassificationDataPipeline = class;
   RegressionDataPipeline = class;
   ClusteringDataPipeline = class;
@@ -54,29 +55,61 @@ type
     property IsFitted: boolean read fFitted;
   end;
 
-  /// DataPipeline — конвейер подготовки данных и обучения модели с учителем на DataFrame.
-  /// 
-  /// Поддерживает два уровня шагов:
-  ///   • DataFrame-уровень: IPreprocessor (Fit/Transform над DataFrame)
-  ///   • Matrix-уровень: ITransformer / ISupervisedTransformer и IModel
-  ///     (после преобразования DataFrame → Matrix/Vector)
-  ///
-  /// Правила порядка шагов:
-  ///   • Сначала идут только DataFrame-шаги (IPreprocessor).
-  ///   • Затем — матричные шаги (ITransformer / ISupervisedTransformer).
-  ///   • Модель (IModel) добавляется последней и может быть только одна.
-  ///
-  /// В конвейере используются:
-  ///   • features — признаки;
-  ///   • target — целевая переменная.
-  ///
-  DataPipeline = class(PipelineBase, IModel)
+  /// Фасад для построения табличных конвейеров.
+  DataPipeline = class
+  public
+    /// Строит табличный конвейер для задачи классификации.
+    static function BuildClassification(
+      target: string;
+      features: array of string;
+      params steps: array of IPipelineStep
+    ): ClassificationDataPipeline;
+
+    /// Строит табличный конвейер для задачи регрессии.
+    static function BuildRegression(
+      target: string;
+      features: array of string;
+      params steps: array of IPipelineStep
+    ): RegressionDataPipeline;
+
+    /// Строит табличный конвейер для задачи кластеризации.
+    static function BuildClustering(
+      features: array of string;
+      params steps: array of IPipelineStep
+    ): ClusteringDataPipeline;
+
+    /// Строит только часть предварительной обработки для задачи классификации.
+    static function BuildClassificationPreprocessing(
+      target: string;
+      features: array of string;
+      params steps: array of IPipelineStep
+    ): ClassificationDataPipeline;
+
+    /// Строит только часть предварительной обработки для задачи регрессии.
+    static function BuildRegressionPreprocessing(
+      target: string;
+      features: array of string;
+      params steps: array of IPipelineStep
+    ): RegressionDataPipeline;
+
+    /// Строит только часть предварительной обработки для задачи кластеризации.
+    static function BuildClusteringPreprocessing(
+      features: array of string;
+      params steps: array of IPipelineStep
+    ): ClusteringDataPipeline;
+  end;
+
+  /// Общая база для табличных конвейеров с учителем.
+  SupervisedDataPipelineBase = class(PipelineBase, IModel)
   protected
-    fModel: ISupervisedModel;
+    fModel: IModel;
     fTask: TaskKind;
     fTarget: string;
 
     procedure ValidateSchema(df: DataFrame); override;
+    function WithModelCore(model: IModel): SupervisedDataPipelineBase;
+    function FitCore(df: DataFrame): SupervisedDataPipelineBase;
+    function PredictCore(df: DataFrame): Vector;
   public
     /// Создаёт пустой конвейер
     constructor Create;
@@ -85,62 +118,10 @@ type
     /// Принимает:
     ///   • IPreprocessor (DataFrame-уровень)
     ///   • ITransformer (Matrix-уровень)
-    ///   • ISupervisedModel (модель, должна быть последней)
+    ///   • IModel (модель, должна быть последней)
     /// Запрещено добавлять шаги после вызова Fit.
-    function Add(step: IPipelineStep): DataPipeline;
-    
-    /// Строит конвейер из шагов обработки данных и модели.
-    /// 
-    /// Используется в задачах с учителем (с target). 
-    /// task задает тип модели - регрессия или классификация
-    /// Шаги выполняются последовательно:
-    /// DataFrame-преобразования → (при необходимости) матричные шаги → модель.
-    static function Build(
-      task: TaskKind;
-      target: string; 
-      features: array of string;
-      params steps: array of IPipelineStep
-    ): DataPipeline;
+    function Add(step: IPipelineStep): SupervisedDataPipelineBase;
 
-    /// Строит supervised-конвейер для задачи классификации.
-    static function BuildClassification(
-      target: string;
-      features: array of string;
-      params steps: array of IPipelineStep
-    ): ClassificationDataPipeline;
-
-    /// Строит supervised-конвейер для задачи регрессии.
-    static function BuildRegression(
-      target: string;
-      features: array of string;
-      params steps: array of IPipelineStep
-    ): RegressionDataPipeline;
-
-    /// Строит unsupervised-конвейер для задачи кластеризации.
-    static function BuildClustering(
-      features: array of string;
-      params steps: array of IPipelineStep
-    ): ClusteringDataPipeline;
-
-    /// Строит только preprocessing-часть supervised-конвейера без модели.
-    /// Модель затем можно присоединить методом WithModel
-    static function BuildPreprocessing(
-      task: TaskKind;
-      target: string;
-      features: array of string;
-      params steps: array of IPipelineStep
-    ): DataPipeline;
-
-    /// Возвращает копию текущего preprocessing-конвейера с добавленной моделью.
-    function WithModel(model: ISupervisedModel): DataPipeline;
-      
-    /// Обучает конвейер на DataFrame.
-    /// Семантика:
-    ///   • выполняет Fit/Transform для всех DataFrame-шагов;
-    ///   • если присутствует модель — преобразует DataFrame в (X, y) по features/target,
-    ///     затем обучает матричные трансформеры и модель.
-    function Fit(df: DataFrame): DataPipeline;
-    
     /// Применяет только обученные DataFrame-шаги pipeline и возвращает новый DataFrame.
     ///
     /// Матричные шаги и модель при этом не используются.
@@ -151,33 +132,6 @@ type
     /// так как DataFrame-преобразования будут выполнены ещё раз.
     function Transform(df: DataFrame): DataFrame;
     
-    /// Делает предсказание модели для объектов из DataFrame.
-    /// Для задач классификации возвращает внутренние индексы классов (0..K-1).
-    /// В отличие от обычных моделей-классификаторов, здесь Predict
-    /// возвращает не исходные метки классов, а их внутренние индексы.
-    /// Доступен после обучения конвейера (Fit).
-    function Predict(df: DataFrame): Vector;
-    
-    /// Возвращает исходные строковые метки классов для объектов из DataFrame.
-    /// Это удобная расшифровка результата Predict через GetClassLabels.
-    /// Доступен только для задач классификации после Fit.
-    function PredictLabels(df: DataFrame): array of string;
-    
-    /// Возвращает матрицу вероятностей (nSamples × nClasses).
-    /// Доступен только если конечная модель поддерживает IProbabilisticClassifier.
-    function PredictProba(df: DataFrame): Matrix;
-    
-    /// Возвращает исходные метки классов в порядке внутреннего кодирования (0..K-1),
-    /// соответствующем индексам, возвращаемым Predict.
-    /// Доступен только для задач классификации.
-    function GetClassLabels: array of string;
-    
-    /// Возвращает внутренние индексы истинных меток классов для DataFrame
-    /// в соответствии с кодированием, полученным при Fit.
-    /// Используется для вычисления метрик после Predict.
-    /// Доступен только для задач классификации после Fit.
-    function GetEncodedLabels(df: DataFrame): Vector;
-    
     function ToString: string; override;
     
     function Name: string := Self.GetType.Name;
@@ -185,19 +139,38 @@ type
     function Clone: IModel;
   end;
 
-  /// Конвейер DataFrame-предобработки и классификации.
-  /// Специализированный тип будет постепенно получать
-  /// собственный контракт Predict/PredictLabels.
-  ClassificationDataPipeline = class(DataPipeline)
+  /// Табличный конвейер для задачи классификации.
+  /// Predict возвращает метки классов в том же виде,
+  /// в каком они были поданы модели при обучении.
+  /// PredictLabels возвращает исходные строковые метки классов.
+  ClassificationDataPipeline = class(SupervisedDataPipelineBase)
+  public
+    function WithModel(model: IClassifier): ClassificationDataPipeline;
+    function Fit(df: DataFrame): ClassificationDataPipeline;
+    /// Возвращает метки классов для объектов из DataFrame
+    /// в том же виде, в каком они были поданы модели при обучении.
+    function Predict(df: DataFrame): array of integer;
+    /// Возвращает строковые метки классов для объектов из DataFrame.
+    function PredictLabels(df: DataFrame): array of string;
+    function PredictProba(df: DataFrame): Matrix;
+    function GetEncodedLabels(df: DataFrame): array of integer;
+    function GetClassLabels: array of string;
   end;
 
-  /// Конвейер DataFrame-предобработки и регрессии.
-  /// Специализированный тип будет постепенно получать
-  /// собственный контракт Predict.
-  RegressionDataPipeline = class(DataPipeline)
+  /// Табличный конвейер для задачи регрессии.
+  /// Predict возвращает числовой вектор предсказаний.
+  RegressionDataPipeline = class(SupervisedDataPipelineBase)
+  public
+    function WithModel(model: IRegressor): RegressionDataPipeline;
+    function Fit(df: DataFrame): RegressionDataPipeline;
+    /// Делает предсказание числовых значений для объектов из DataFrame.
+    /// Доступен после обучения конвейера (Fit).
+    function Predict(df: DataFrame): Vector;
   end;
   
-  /// UDataPipeline — конвейер подготовки данных и обучения модели без учителя на DataFrame.
+  /// Общая база для табличных конвейеров без учителя.
+  /// 
+  /// UnsupervisedDataPipelineBase — конвейер подготовки данных и обучения модели без учителя на DataFrame.
   /// 
   /// Поддерживает два уровня шагов:
   ///   • DataFrame-уровень: IPreprocessor (Fit/Transform над DataFrame)
@@ -212,13 +185,17 @@ type
   /// В конвейере используются:
   ///   • features — признаки (целевая переменная отсутствует).
   ///
-  UDataPipeline = class(PipelineBase, IModel)
+  UnsupervisedDataPipelineBase = class(PipelineBase, IModel)
   protected
     fModel: IUnsupervisedModel;
   
     procedure ValidateNumericFeatures(df: DataFrame);
     function TransformToMatrix(df: DataFrame): Matrix;
     procedure ValidateSchema(df: DataFrame); override;
+    function WithModelCore(model: IUnsupervisedModel): UnsupervisedDataPipelineBase;
+    function FitCore(df: DataFrame): UnsupervisedDataPipelineBase;
+    function FitPredictCore(df: DataFrame): array of integer;
+    function PredictCore(df: DataFrame): array of integer;
   public
     /// Создаёт пустой конвейер
     constructor Create;
@@ -228,22 +205,8 @@ type
     ///   • IPreprocessor (DataFrame-уровень)
     ///   • ITransformer (Matrix-уровень)
     ///   • IUnsupervisedModel (модель, должна быть последней)
-    function Add(step: IPipelineStep): UDataPipeline;
-  
-    /// Строит unsupervised-конвейер из шагов обработки данных и модели.
-    static function Build(features: array of string;
-      params steps: array of IPipelineStep): UDataPipeline;
+    function Add(step: IPipelineStep): UnsupervisedDataPipelineBase;
 
-    /// Строит только preprocessing-часть unsupervised-конвейера без модели.
-    static function BuildPreprocessing(features: array of string;
-      params steps: array of IPipelineStep): UDataPipeline;
-
-    /// Возвращает копию текущего preprocessing-конвейера с добавленной моделью.
-    function WithModel(model: IUnsupervisedModel): UDataPipeline;
-  
-    /// Обучает конвейер на DataFrame.
-    function Fit(df: DataFrame): UDataPipeline;
-  
     /// Применяет только обученные DataFrame-шаги pipeline и возвращает новый DataFrame.
     ///
     /// Матричные шаги и модель при этом не используются.
@@ -254,31 +217,6 @@ type
     /// так как DataFrame-преобразования будут выполнены ещё раз.
     function Transform(df: DataFrame): DataFrame;
   
-    /// Обучает конвейер и сразу возвращает метки кластеров.
-    /// 
-    /// Выполняет полный pipeline:
-    ///   DataFrame-преобразования → построение матрицы признаков →
-    ///   матричные трансформеры → FitPredict модели.
-    /// 
-    /// Используется для задач кластеризации, где нет разделения на train/test.
-    /// 
-    /// Доступен только если:
-    ///   • конечная модель поддерживает кластеризацию (IClusterer).
-    function FitPredict(df: DataFrame): array of integer;
-  
-    /// Делает предсказание модели для объектов из DataFrame.
-    function Predict(df: DataFrame): Vector;
-    
-    /// Возвращает метки кластеров для объектов из DataFrame.
-    /// 
-    /// Выполняет последовательные преобразования данных (DataFrame и матричные шаги),
-    /// затем применяет обученную модель кластеризации.
-    /// 
-    /// Доступен только если:
-    ///   • конечная модель поддерживает кластеризацию (IClusterer);
-    ///   • конвейер был обучен (Fit).
-    function PredictLabels(df: DataFrame): array of integer;
-  
     function ToString: string; override;
     
     function Clone: IModel;
@@ -287,10 +225,17 @@ type
     
   end;  
 
-  /// Конвейер DataFrame-предобработки и кластеризации.
-  /// Специализированный тип будет постепенно получать
-  /// собственный контракт Predict.
-  ClusteringDataPipeline = class(UDataPipeline)
+  /// Табличный конвейер для задачи кластеризации.
+  /// Predict возвращает внутренние индексы кластеров.
+  ClusteringDataPipeline = class(UnsupervisedDataPipelineBase)
+  public
+    function WithModel(model: IUnsupervisedModel): ClusteringDataPipeline;
+    function Fit(df: DataFrame): ClusteringDataPipeline;
+    /// Обучает конвейер и сразу возвращает метки кластеров.
+    function FitPredict(df: DataFrame): array of integer;
+    /// Делает предсказание кластеров для объектов из DataFrame.
+    /// Возвращает внутренние индексы кластеров.
+    function Predict(df: DataFrame): array of integer;
   end;
   
 implementation
@@ -559,14 +504,14 @@ end;
 //        DataPipeline
 //-----------------------------
 
-constructor DataPipeline.Create;
+constructor SupervisedDataPipelineBase.Create;
 begin
   inherited Create;
   fModel := nil;
   fTarget := '';
 end;
 
-function DataPipeline.Add(step: IPipelineStep): DataPipeline;
+function SupervisedDataPipelineBase.Add(step: IPipelineStep): SupervisedDataPipelineBase;
 begin
   // --- global invariants
   if step = nil then
@@ -609,12 +554,12 @@ begin
   end;
 
   // --- Model (обязательно последний шаг)
-  if step is ISupervisedModel then
+  if step is IModel then
   begin
     if fModel <> nil then
       ArgumentError(ER_PIPELINE_MULTIPLE_MODELS);
 
-    fModel := step as ISupervisedModel;
+    fModel := step as IModel;
     exit(Self);
   end;
 
@@ -622,20 +567,16 @@ begin
   Result := Self;
 end;
 
-class function DataPipeline.BuildPreprocessing(
-  task: TaskKind;
+class function DataPipeline.BuildClassificationPreprocessing(
   target: string;
   features: array of string;
   params steps: array of IPipelineStep
-): DataPipeline;
+): ClassificationDataPipeline;
 begin
-  if not (task in [TaskKind.tkClassification, TaskKind.tkRegression]) then
-    ArgumentError(ER_DATAPIPE_INVALID_TASK);
-
   if (target = nil) or (target = '') then
     ArgumentError(ER_TARGET_EMPTY);
 
-  ValidateFeatureList(features);
+  PipelineBase.ValidateFeatureList(features);
 
   foreach var f in features do
     if f = target then
@@ -649,14 +590,14 @@ begin
       if step = nil then
         ArgumentError(ER_PIPELINE_STEP_NULL, i);
 
-      if step is ISupervisedModel then
+      if step is IModel then
         ArgumentError(ER_PIPELINE_INVALID_STEP_ORDER);
     end;
 
-  var p := new DataPipeline;
+  var p := new ClassificationDataPipeline;
   p.fTarget := target;
   p.fFeatures := Copy(features);
-  p.fTask := task;
+  p.fTask := TaskKind.tkClassification;
 
   for var i := 0 to High(steps) do
     p.Add(steps[i]);
@@ -664,55 +605,42 @@ begin
   Result := p;
 end;
 
-class function DataPipeline.Build(
-  task: TaskKind;
+class function DataPipeline.BuildRegressionPreprocessing(
   target: string;
-  features: array of string; 
+  features: array of string;
   params steps: array of IPipelineStep
-): DataPipeline;
+): RegressionDataPipeline;
 begin
-  if (steps = nil) or (Length(steps) = 0) then
-    ArgumentError(ER_PIPELINE_NO_STEPS);
+  if (target = nil) or (target = '') then
+    ArgumentError(ER_TARGET_EMPTY);
 
-  var last := steps[High(steps)];
+  PipelineBase.ValidateFeatureList(features);
 
-  if last = nil then
-    ArgumentError(ER_PIPELINE_STEP_NULL, High(steps));
+  foreach var f in features do
+    if f = target then
+      ArgumentError(ER_DATAPIPE_TARGET_IN_FEATURES, target);
 
-  if not (last is ISupervisedModel) then
-    ArgumentError(ER_PIPELINE_LAST_NOT_SUPERVISED_MODEL);
-  
-  var modelFound := false;
+  if steps <> nil then
+    for var i := 0 to High(steps) do
+    begin
+      var step := steps[i];
+
+      if step = nil then
+        ArgumentError(ER_PIPELINE_STEP_NULL, i);
+
+      if step is IModel then
+        ArgumentError(ER_PIPELINE_INVALID_STEP_ORDER);
+    end;
+
+  var p := new RegressionDataPipeline;
+  p.fTarget := target;
+  p.fFeatures := Copy(features);
+  p.fTask := TaskKind.tkRegression;
 
   for var i := 0 to High(steps) do
-  begin
-    if steps[i] is ISupervisedModel then
-    begin
-      if modelFound then
-        ArgumentError(ER_PIPELINE_MULTIPLE_MODELS);
-  
-      modelFound := true;
-    end;
-  end;
+    p.Add(steps[i]);
 
-  for var i := 0 to High(steps) - 1 do
-  begin
-    var step := steps[i];
-
-    if step = nil then
-      ArgumentError(ER_PIPELINE_STEP_NULL, i);
-
-    if step is ISupervisedModel then
-      ArgumentError(ER_PIPELINE_INVALID_STEP_ORDER);
-  end;
-
-  var prepSteps := new IPipelineStep[steps.Length - 1];
-  for var i := 0 to High(prepSteps) do
-    prepSteps[i] := steps[i];
-
-  Result :=
-    BuildPreprocessing(task, target, features, prepSteps)
-      .WithModel(last as ISupervisedModel);
+  Result := p;
 end;
 
 class function DataPipeline.BuildClassification(
@@ -721,7 +649,7 @@ class function DataPipeline.BuildClassification(
   params steps: array of IPipelineStep
 ): ClassificationDataPipeline;
 begin
-  ValidateFeatureList(features);
+  PipelineBase.ValidateFeatureList(features);
 
   if (target = nil) or (target = '') then
     ArgumentError(ER_TARGET_EMPTY);
@@ -748,7 +676,7 @@ class function DataPipeline.BuildRegression(
   params steps: array of IPipelineStep
 ): RegressionDataPipeline;
 begin
-  ValidateFeatureList(features);
+  PipelineBase.ValidateFeatureList(features);
 
   if (target = nil) or (target = '') then
     ArgumentError(ER_TARGET_EMPTY);
@@ -774,7 +702,7 @@ class function DataPipeline.BuildClustering(
   params steps: array of IPipelineStep
 ): ClusteringDataPipeline;
 begin
-  ValidateFeatureList(features);
+  PipelineBase.ValidateFeatureList(features);
 
   var p := new ClusteringDataPipeline;
   p.fFeatures := Copy(features);
@@ -786,12 +714,41 @@ begin
   Result := p;
 end;
 
-function DataPipeline.WithModel(model: ISupervisedModel): DataPipeline;
+class function DataPipeline.BuildClusteringPreprocessing(
+  features: array of string;
+  params steps: array of IPipelineStep
+): ClusteringDataPipeline;
+begin
+  PipelineBase.ValidateFeatureList(features);
+
+  if steps <> nil then
+    for var i := 0 to High(steps) do
+    begin
+      var step := steps[i];
+
+      if step = nil then
+        ArgumentError(ER_PIPELINE_STEP_NULL, i);
+
+      if step is IUnsupervisedModel then
+        ArgumentError(ER_PIPELINE_INVALID_STEP_ORDER);
+    end;
+
+  var p := new ClusteringDataPipeline;
+  p.fFeatures := Copy(features);
+
+  if steps <> nil then
+    for var i := 0 to High(steps) do
+      p.Add(steps[i]);
+
+  Result := p;
+end;
+
+function SupervisedDataPipelineBase.WithModelCore(model: IModel): SupervisedDataPipelineBase;
 begin
   if model = nil then
     ArgumentError(ER_MODEL_NULL);
 
-  var p := Clone as DataPipeline;
+  var p := Clone as SupervisedDataPipelineBase;
 
   if p = nil then
     Error(ER_MODEL_CLONE_TYPE);
@@ -806,7 +763,7 @@ begin
   Result := p;
 end;
 
-function DataPipeline.Fit(df: DataFrame): DataPipeline;
+function SupervisedDataPipelineBase.FitCore(df: DataFrame): SupervisedDataPipelineBase;
 begin
   if df = nil then
     ArgumentNullError(ER_ARG_NULL, 'df');
@@ -821,6 +778,7 @@ begin
 
   var classes: array of string;  
   var y: Vector;
+  var labels: array of integer;
 
   case fTask of
     tkRegression:
@@ -828,7 +786,7 @@ begin
 
     tkClassification:
       begin
-        var labels := current.EncodeLabels(fTarget, classes);
+        labels := current.EncodeLabels(fTarget, classes);
         y := new Vector(labels);
       end;
   end;
@@ -838,7 +796,20 @@ begin
 
   X := FitTransformMatrix(X, y);
 
-  fModel := fModel.Fit(X, y);
+  case fTask of
+    tkRegression:
+      begin
+        if not (fModel is IRegressor) then
+          ArgumentError(ER_MODEL_NOT_SUPERVISED, fModel.GetType.Name);
+        fModel := (fModel as IRegressor).Fit(X, y);
+      end;
+    tkClassification:
+      begin
+        if not (fModel is IClassifier) then
+          ArgumentError(ER_MODEL_NOT_CLASSIFIER);
+        fModel := (fModel as IClassifier).Fit(X, labels);
+      end;
+  end;
 
   if fTask = tkClassification then
   begin
@@ -852,10 +823,10 @@ begin
   Result := Self;
 end;
 
-function DataPipeline.Transform(df: DataFrame): DataFrame := TransformDataFrame(df);
+function SupervisedDataPipelineBase.Transform(df: DataFrame): DataFrame := TransformDataFrame(df);
 
 
-function DataPipeline.Predict(df: DataFrame): Vector;
+function SupervisedDataPipelineBase.PredictCore(df: DataFrame): Vector;
 begin
   if df = nil then
     ArgumentNullError(ER_ARG_NULL, 'df');
@@ -865,26 +836,55 @@ begin
   if fModel = nil then
     ArgumentError(ER_MODEL_NULL);
 
+  if not (fModel is IRegressor) then
+    Error(ER_PREDICT_NOT_SUPPORTED);
+
   var current := Transform(df);
 
   var X := current.ToMatrix(fFinalFeatures);
   X := TransformMatrix(X);
 
-  if not (fModel is IPredictiveModel) then
-    Error(ER_PREDICT_NOT_SUPPORTED);
-
-  Result := (fModel as IPredictiveModel).Predict(X);
+  Result := (fModel as IRegressor).Predict(X);
 end;
 
-function DataPipeline.PredictLabels(df: DataFrame): array of string;
+function ClassificationDataPipeline.Predict(df: DataFrame): array of integer;
+begin
+  if df = nil then
+    ArgumentNullError(ER_ARG_NULL, 'df');
+  if not fFitted then
+    NotFittedError(ER_FIT_NOT_CALLED);
+
+  if fModel = nil then
+    ArgumentError(ER_MODEL_NULL);
+
+  if not (fModel is IClassifier) then
+    Error(ER_PREDICT_NOT_SUPPORTED);
+
+  var current := Transform(df);
+
+  var X := current.ToMatrix(fFinalFeatures);
+  X := TransformMatrix(X);
+
+  Result := (fModel as IClassifier).Predict(X);
+end;
+
+function ClassificationDataPipeline.WithModel(model: IClassifier): ClassificationDataPipeline;
+begin
+  Result := inherited WithModelCore(model) as ClassificationDataPipeline;
+end;
+
+function ClassificationDataPipeline.Fit(df: DataFrame): ClassificationDataPipeline;
+begin
+  inherited FitCore(df);
+  Result := Self;
+end;
+
+function ClassificationDataPipeline.PredictLabels(df: DataFrame): array of string;
 begin
   if not fFitted then
     NotFittedError(ER_FIT_NOT_CALLED);
 
-  if fTask <> tkClassification then
-    ArgumentError(ER_NOT_CLASSIFICATION);
-
-  var encoded := LabelsToInts(Predict(df));
+  var encoded := Predict(df);
   var classes := GetClassLabels;
   Result := new string[encoded.Length];
   
@@ -898,7 +898,7 @@ begin
   end;
 end;
 
-function DataPipeline.PredictProba(df: DataFrame): Matrix;
+function ClassificationDataPipeline.PredictProba(df: DataFrame): Matrix;
 begin
   if df = nil then
     ArgumentNullError(ER_ARG_NULL, 'df');
@@ -919,7 +919,7 @@ begin
   Result := (fModel as IProbabilisticClassifier).PredictProba(X);
 end;
 
-function DataPipeline.GetEncodedLabels(df: DataFrame): Vector;
+function ClassificationDataPipeline.GetEncodedLabels(df: DataFrame): array of integer;
 begin
   if not fFitted then
     NotFittedError(ER_FIT_NOT_CALLED);
@@ -934,11 +934,10 @@ begin
     ArgumentError(ER_COLUMN_NOT_FOUND, fTarget);
 
   var classes := GetClassLabels;
-  var labels := df.TransformLabels(fTarget, classes);
-  Result := new Vector(labels);
+  Result := df.TransformLabels(fTarget, classes);
 end;
 
-function DataPipeline.GetClassLabels: array of string;
+function ClassificationDataPipeline.GetClassLabels: array of string;
 begin
   if not fFitted then
     NotFittedError(ER_FIT_NOT_CALLED);
@@ -953,12 +952,28 @@ begin
   Result := cls.GetClassLabels;
 end;
 
-procedure DataPipeline.ValidateSchema(df: DataFrame);
+function RegressionDataPipeline.WithModel(model: IRegressor): RegressionDataPipeline;
+begin
+  Result := inherited WithModelCore(model) as RegressionDataPipeline;
+end;
+
+function RegressionDataPipeline.Fit(df: DataFrame): RegressionDataPipeline;
+begin
+  inherited FitCore(df);
+  Result := Self;
+end;
+
+function RegressionDataPipeline.Predict(df: DataFrame): Vector;
+begin
+  Result := inherited PredictCore(df);
+end;
+
+procedure SupervisedDataPipelineBase.ValidateSchema(df: DataFrame);
 begin
   if fTarget = '' then
     ArgumentError(ER_TARGET_EMPTY);
 
-  ValidateFeatureList(fFeatures);
+  PipelineBase.ValidateFeatureList(fFeatures);
 
   // target не должен входить в features
   for var i := 0 to High(fFeatures) do
@@ -1002,9 +1017,9 @@ begin
   end;
 end;
 
-function DataPipeline.ToString: string;
+function SupervisedDataPipelineBase.ToString: string;
 begin
-  var sb := 'DataPipeline (' +
+  var sb := 'SupervisedDataPipelineBase (' +
             (if fFitted then 'trained' else 'not trained') + '):' + NewLine;
 
   sb += '  Target: ' + fTarget + NewLine;
@@ -1030,9 +1045,16 @@ begin
   Result := sb;
 end;
 
-function DataPipeline.Clone: IModel;
+function SupervisedDataPipelineBase.Clone: IModel;
 begin
-  var p := new DataPipeline;
+  var p: SupervisedDataPipelineBase;
+
+  if Self is ClassificationDataPipeline then
+    p := new ClassificationDataPipeline
+  else if Self is RegressionDataPipeline then
+    p := new RegressionDataPipeline
+  else
+    p := new SupervisedDataPipelineBase;
 
   // --- конфигурация
   p.fFeatures := Copy(fFeatures);
@@ -1047,10 +1069,10 @@ begin
   if fModel <> nil then
   begin  
     var m := fModel.Clone;
-    if not (m is ISupervisedModel) then
+    if not (m is IModel) then
       Error(ER_MODEL_CLONE_TYPE);
     
-    p.fModel := m as ISupervisedModel;   
+    p.fModel := m as IModel;   
   end;  
 
   // --- состояние НЕ копируем
@@ -1061,16 +1083,16 @@ begin
 end;
 
 //-----------------------------
-//        UDataPipeline 
+//        UnsupervisedDataPipelineBase
 //-----------------------------
 
-constructor UDataPipeline.Create;
+constructor UnsupervisedDataPipelineBase.Create;
 begin
   inherited Create;
   fModel := nil;
 end;
 
-function UDataPipeline.Add(step: IPipelineStep): UDataPipeline;
+function UnsupervisedDataPipelineBase.Add(step: IPipelineStep): UnsupervisedDataPipelineBase;
 begin
   if step = nil then
     ArgumentError(ER_PIPELINE_STEP_NULL);
@@ -1112,76 +1134,15 @@ begin
   Result := Self;
 end;
 
-class function UDataPipeline.BuildPreprocessing(features: array of string;
-  params steps: array of IPipelineStep): UDataPipeline;
-begin
-  ValidateFeatureList(features);
-
-  if steps <> nil then
-    for var i := 0 to High(steps) do
-    begin
-      var step := steps[i];
-
-      if step = nil then
-        ArgumentError(ER_PIPELINE_STEP_NULL, i);
-
-      if step is IUnsupervisedModel then
-        ArgumentError(ER_PIPELINE_INVALID_STEP_ORDER);
-    end;
-
-  var p := new UDataPipeline;
-  p.fFeatures := Copy(features);
-
-  if steps <> nil then
-    for var i := 0 to High(steps) do
-      p.Add(steps[i]);
-
-  Result := p;
-end;
-
-class function UDataPipeline.Build(features: array of string;
-  params steps: array of IPipelineStep): UDataPipeline;
-begin
-  if (steps = nil) or (Length(steps) = 0) then
-    ArgumentError(ER_PIPELINE_NO_STEPS);
-
-  var last := steps[High(steps)];
-
-  if last = nil then
-    ArgumentError(ER_PIPELINE_STEP_NULL, High(steps));
-
-  if not (last is IUnsupervisedModel) then
-    ArgumentError(ER_PIPELINE_LAST_NOT_UNSUPERVISED_MODEL);
-
-  for var i := 0 to High(steps) - 1 do
-  begin
-    var step := steps[i];
-
-    if step = nil then
-      ArgumentError(ER_PIPELINE_STEP_NULL, i);
-
-    if step is IUnsupervisedModel then
-      ArgumentError(ER_PIPELINE_INVALID_STEP_ORDER);
-  end;
-
-  var prepSteps := new IPipelineStep[steps.Length - 1];
-  for var i := 0 to High(prepSteps) do
-    prepSteps[i] := steps[i];
-
-  Result :=
-    BuildPreprocessing(features, prepSteps)
-      .WithModel(last as IUnsupervisedModel);
-end;
-
-function UDataPipeline.WithModel(model: IUnsupervisedModel): UDataPipeline;
+function UnsupervisedDataPipelineBase.WithModelCore(model: IUnsupervisedModel): UnsupervisedDataPipelineBase;
 begin
   if model = nil then
     ArgumentError(ER_MODEL_NULL);
 
-  var p := Clone as UDataPipeline;
+  var p := Clone as UnsupervisedDataPipelineBase;
 
   if p = nil then
-    Error(ER_INVALID_MODEL_TYPE, 'UDataPipeline');
+    Error(ER_INVALID_MODEL_TYPE, 'UnsupervisedDataPipelineBase');
 
   if p.fFitted then
     Error(ER_PIPELINE_MODIFY_AFTER_FIT);
@@ -1193,7 +1154,7 @@ begin
   Result := p;
 end;
 
-function UDataPipeline.Fit(df: DataFrame): UDataPipeline;
+function UnsupervisedDataPipelineBase.FitCore(df: DataFrame): UnsupervisedDataPipelineBase;
 begin
   if df = nil then
     ArgumentNullError(ER_ARG_NULL, 'df');
@@ -1211,9 +1172,9 @@ begin
   Result := Self;
 end;
 
-function UDataPipeline.Transform(df: DataFrame): DataFrame := TransformDataFrame(df);
+function UnsupervisedDataPipelineBase.Transform(df: DataFrame): DataFrame := TransformDataFrame(df);
 
-function UDataPipeline.FitPredict(df: DataFrame): array of integer;
+function UnsupervisedDataPipelineBase.FitPredictCore(df: DataFrame): array of integer;
 begin
   if df = nil then
     ArgumentNullError(ER_ARG_NULL, 'df');
@@ -1254,7 +1215,7 @@ begin
   fFitted := true;
 end;
 
-procedure UDataPipeline.ValidateNumericFeatures(df: DataFrame);
+procedure UnsupervisedDataPipelineBase.ValidateNumericFeatures(df: DataFrame);
 begin
   if fFinalFeatures = nil then
     Error(ER_PIPELINE_FINALFEATURES);
@@ -1275,7 +1236,7 @@ begin
   end;
 end;
 
-function UDataPipeline.TransformToMatrix(df: DataFrame): Matrix;
+function UnsupervisedDataPipelineBase.TransformToMatrix(df: DataFrame): Matrix;
 begin
   if df = nil then
     ArgumentNullError(ER_ARG_NULL, 'df');
@@ -1300,7 +1261,7 @@ begin
   Result := X;
 end;
 
-function UDataPipeline.Predict(df: DataFrame): Vector;
+function UnsupervisedDataPipelineBase.PredictCore(df: DataFrame): array of integer;
 begin
   if df = nil then
     ArgumentNullError(ER_ARG_NULL, 'df');
@@ -1312,37 +1273,37 @@ begin
     ArgumentError(ER_MODEL_NULL);
 
   var X := TransformToMatrix(df);
-
-  if not (fModel is IPredictiveModel) then
-    Error(ER_PREDICT_NOT_SUPPORTED);
-
-  Result := (fModel as IPredictiveModel).Predict(X);
-end;
-
-function UDataPipeline.PredictLabels(df: DataFrame): array of integer;
-begin
-  if df = nil then
-    ArgumentNullError(ER_ARG_NULL, 'df');
-
-  if not fFitted then
-    NotFittedError(ER_FIT_NOT_CALLED);
-
-  if fModel = nil then
-    ArgumentError(ER_MODEL_NULL);
 
   if not (fModel is IPredictiveClusterer) then
     Error(ER_PREDICT_NOT_SUPPORTED);
 
-  var cl := fModel as IPredictiveClusterer;
-
-  var X := TransformToMatrix(df);
-
-  Result := cl.PredictLabels(X);
+  Result := (fModel as IPredictiveClusterer).Predict(X);
 end;
 
-procedure UDataPipeline.ValidateSchema(df: DataFrame);
+function ClusteringDataPipeline.WithModel(model: IUnsupervisedModel): ClusteringDataPipeline;
 begin
-  ValidateFeatureList(fFeatures);
+  Result := inherited WithModelCore(model) as ClusteringDataPipeline;
+end;
+
+function ClusteringDataPipeline.Fit(df: DataFrame): ClusteringDataPipeline;
+begin
+  inherited FitCore(df);
+  Result := Self;
+end;
+
+function ClusteringDataPipeline.FitPredict(df: DataFrame): array of integer;
+begin
+  Result := inherited FitPredictCore(df);
+end;
+
+function ClusteringDataPipeline.Predict(df: DataFrame): array of integer;
+begin
+  Result := inherited PredictCore(df);
+end;
+
+procedure UnsupervisedDataPipelineBase.ValidateSchema(df: DataFrame);
+begin
+  PipelineBase.ValidateFeatureList(fFeatures);
 
   for var i := 0 to High(fFeatures) do
   begin
@@ -1356,9 +1317,9 @@ begin
   end;
 end;
 
-function UDataPipeline.ToString: string;
+function UnsupervisedDataPipelineBase.ToString: string;
 begin
-  var sb := 'UDataPipeline (' +
+  var sb := 'UnsupervisedDataPipelineBase (' +
             (if fFitted then 'trained' else 'not trained') + '):' + NewLine;
 
   var idx := 1;
@@ -1381,9 +1342,14 @@ begin
   Result := sb;
 end;
 
-function UDataPipeline.Clone: IModel;
+function UnsupervisedDataPipelineBase.Clone: IModel;
 begin
-  var p := new UDataPipeline;
+  var p: UnsupervisedDataPipelineBase;
+
+  if Self is ClusteringDataPipeline then
+    p := new ClusteringDataPipeline
+  else
+    p := new UnsupervisedDataPipelineBase;
 
   // --- конфигурация
   p.fFeatures := Copy(fFeatures);

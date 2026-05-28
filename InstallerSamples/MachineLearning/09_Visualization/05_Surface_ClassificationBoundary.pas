@@ -16,14 +16,14 @@ begin
 
   var x1 := X.Col(0);
   var x2 := X.Col(1);
-  var labels := LabelsToInts(y);
+  var labels := y;
 
   Println('Граница решений для DecisionTreeClassifier');
   Println;
   Println('Цветной фон показывает области, которые модель относит к разным классам.');
   Println($'Accuracy = {acc:F3}');
 
-  Plot.Surface(x1, x2, 80, 80, G -> model.PredictLabels(G), Palettes.Pastel);
+  Plot.Surface(x1, x2, 80, 80, G -> model.Predict(G), Palettes.Pastel);
   Plot.Points(x1, x2, labels, size := 6);
   Plot.Title := $'DecisionTreeClassifier: decision boundary (Acc = {acc:F3})';
 end.

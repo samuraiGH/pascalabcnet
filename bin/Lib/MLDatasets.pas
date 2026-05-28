@@ -71,7 +71,7 @@ type
     function HasTarget: boolean;
   end;
 
-  /// Кодирует target-колонку классификационного Dataset в числовой Vector.
+  /// Кодирует target-колонку классификационного Dataset в массив целых меток.
   /// Используется только для целевой переменной, не для признаков.
   LabelEncoder = class
   private
@@ -84,14 +84,14 @@ type
     function TargetLabels(ds: Dataset): array of string;
   public
     function Fit(ds: Dataset): LabelEncoder;
-    function Transform(ds: Dataset): Vector;
-    function FitTransform(ds: Dataset): Vector;
+    function Transform(ds: Dataset): array of integer;
+    function FitTransform(ds: Dataset): array of integer;
     
     property Classes: array of string read GetClasses;
     
     function ClassName(index: integer): string;
     function ClassIndex(name: string): integer;
-    function Decode(y: Vector): array of string;
+    function Decode(y: array of integer): array of string;
   end;
 
   /// Набор генераторов и загрузчиков датасетов для задач машинного обучения.
@@ -129,7 +129,7 @@ type
       classBalance: real := 1.0;
       noisePoints: integer := 0;
       shuffle: boolean := true;
-      seed: integer := -1): (Matrix, Vector);
+      seed: integer := -1): (Matrix, array of integer);
       
     /// Генерирует синтетический датасет «две луны» (two interleaving moons),
     /// часто используемый для демонстрации алгоритмов классификации и кластеризации.
@@ -143,7 +143,7 @@ type
       n: integer := 300;
       noise: real := 0.05;
       shuffle: boolean := true;
-      seed: integer := -1): (Matrix, Vector);
+      seed: integer := -1): (Matrix, array of integer);
     
     /// Генерирует синтетический датасет для задачи регрессии.
     /// Данные создаются по модели y = Xβ + f(X) + ε, где:
@@ -197,7 +197,7 @@ type
       flipProb: real := 0.0;
       scale: real := 1.0;
       shuffle: boolean := true;
-      seed: integer := -1): (Matrix, Vector);
+      seed: integer := -1): (Matrix, array of integer);
     
     /// Генерирует синтетический датасет в виде спиралей.
     /// Используется для демонстрации сложных нелинейных границ
@@ -217,7 +217,7 @@ type
       turns: real := 3.0;
       radius: real := 1.0;
       shuffle: boolean := true;
-      seed: integer := -1): (Matrix, Vector);
+      seed: integer := -1): (Matrix, array of integer);
 
     /// Генерирует синтетический датасет для задачи классификации.
     /// Формирует линейно (или почти линейно) разделимые классы с контролируемым шумом.
@@ -242,7 +242,7 @@ type
       flipProb: real := 0.0;
       classBalance: real := 0.5;
       shuffle: boolean := true;
-      seed: integer := -1): (Matrix, Vector);      
+      seed: integer := -1): (Matrix, array of integer);      
     
     /// Загружает датасет по имени.
     ///
@@ -723,7 +723,7 @@ begin
   Result := self;
 end;
 
-function LabelEncoder.Transform(ds: Dataset): Vector;
+function LabelEncoder.Transform(ds: Dataset): array of integer;
 begin
   EnsureFitted;
 
@@ -740,10 +740,10 @@ begin
     y[i] := fClassToIndex[labelName];
   end;
 
-  Result := new Vector(y);
+  Result := y;
 end;
 
-function LabelEncoder.FitTransform(ds: Dataset): Vector;
+function LabelEncoder.FitTransform(ds: Dataset): array of integer;
 begin
   Fit(ds);
   Result := Transform(ds);
@@ -769,7 +769,7 @@ begin
   Result := fClassToIndex[name];
 end;
 
-function LabelEncoder.Decode(y: Vector): array of string;
+function LabelEncoder.Decode(y: array of integer): array of string;
 begin
   EnsureFitted;
 
@@ -780,10 +780,9 @@ begin
 
   for var i := 0 to y.Length - 1 do
   begin
-    var value := y.Data[i];
-    var index := Round(value);
+    var index := y[i];
 
-    if (Abs(value - index) > 1e-12) or (index < 0) or (index >= fClasses.Length) then
+    if (index < 0) or (index >= fClasses.Length) then
       ArgumentError(ER_LABEL_ENCODER_INDEX_OUT_OF_RANGE, index);
 
     Result[i] := fClasses[index];
@@ -799,7 +798,7 @@ static function Datasets.MakeBlobs(
   n, centers, nFeatures: integer;
   clusterStd, clusterStdVar, centerBox, classBalance: real;
   noisePoints: integer; shuffle: boolean;
-  seed: integer): (Matrix, Vector);
+  seed: integer): (Matrix, array of integer);
 begin
   if n <= 0 then
     ArgumentOutOfRangeError(ER_PARAM_GT_ZERO, 'n');
@@ -838,7 +837,7 @@ begin
   var rnd := new System.Random(actualSeed);
   
   var X := new Matrix(n, nFeatures);
-  var y := new Vector(n);
+  var y := new integer[n];
   
   // --- центры
   var centersM := new Matrix(centers, nFeatures);
@@ -928,7 +927,7 @@ static function Datasets.MakeMoons(
   n: integer;
   noise: real;
   shuffle: boolean;
-  seed: integer): (Matrix, Vector);
+  seed: integer): (Matrix, array of integer);
 begin
   if n <= 0 then
     ArgumentOutOfRangeError(ER_PARAM_GT_ZERO, 'n');
@@ -943,7 +942,7 @@ begin
   var rnd := new System.Random(actualSeed);
   
   var X := new Matrix(n, 2);
-  var y := new Vector(n);
+  var y := new integer[n];
   
   var idx := Arr(0..n - 1);
   if shuffle then
@@ -1074,7 +1073,7 @@ static function Datasets.MakeCircles(
   n: integer;
   noise, factor, classBalance, flipProb, scale: real;
   shuffle: boolean;
-  seed: integer): (Matrix, Vector);
+  seed: integer): (Matrix, array of integer);
 begin
   if n <= 0 then
     ArgumentOutOfRangeError(ER_PARAM_GT_ZERO, 'n');
@@ -1101,7 +1100,7 @@ begin
   var rnd := new System.Random(actualSeed);
 
   var X := new Matrix(n, 2);
-  var y := new Vector(n);
+  var y := new integer[n];
 
   var idx := Arr(0..n-1);
   if shuffle then
@@ -1147,7 +1146,7 @@ end;
 static function Datasets.MakeSpiral(
   n: integer; classes: integer;
   noise: real; turns: real; radius: real;
-  shuffle: boolean; seed: integer): (Matrix, Vector);
+  shuffle: boolean; seed: integer): (Matrix, array of integer);
 begin
   if n <= 0 then
     ArgumentOutOfRangeError(ER_PARAM_GT_ZERO, 'n');
@@ -1171,7 +1170,7 @@ begin
   var rnd := new System.Random(actualSeed);
 
   var X := new Matrix(n,2);
-  var y := new Vector(n);
+  var y := new integer[n];
 
   var idx := Arr(0..n-1);
   if shuffle then
@@ -1224,7 +1223,7 @@ static function Datasets.MakeClassification(
   n, nFeatures, nInformative, nRedundant: integer;
   noise, classSep, flipProb, classBalance: real;
   shuffle: boolean;
-  seed: integer): (Matrix, Vector);
+  seed: integer): (Matrix, array of integer);
 begin
   if n <= 0 then
     ArgumentOutOfRangeError(ER_PARAM_GT_ZERO, 'n');
@@ -1263,7 +1262,7 @@ begin
   var rnd := new System.Random(actualSeed);
 
   var X := new Matrix(n, nFeatures);
-  var y := new Vector(n);
+  var y := new integer[n];
   
   // --- направление разделения классов
   var center := new Vector(nInformative);

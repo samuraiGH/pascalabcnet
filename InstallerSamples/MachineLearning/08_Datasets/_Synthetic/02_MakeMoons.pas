@@ -11,5 +11,5 @@ begin
 
   Plot.Title :='MakeMoons синтетический датасет';
 
-  Plot.Points(X.Col(0), X.Col(1), LabelsToInts(y), size := 4);
+  Plot.Points(X.Col(0), X.Col(1), y, size := 4);
 end.

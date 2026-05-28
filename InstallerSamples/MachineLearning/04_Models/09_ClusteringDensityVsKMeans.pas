@@ -36,12 +36,11 @@ begin
   // --- модели
   var kmeans := new KMeans(5);
   kmeans.Fit(X);
-  var yKM := kmeans.PredictLabels(X);
+  var yKM := kmeans.Predict(X);
   kmeans.ClustersCount.Println;
 
   var db := new DBSCAN(0.7, 5);
-  db.Fit(X);
-  var yDB := db.PredictLabels(X);
+  var yDB := db.FitPredict(X);
   db.ClustersCount.Println;
 
   // --- метрики

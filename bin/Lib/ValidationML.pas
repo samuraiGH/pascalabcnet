@@ -25,10 +25,14 @@ type
 /// Все методы используют генератор случайных чисел (seed) для воспроизводимости
   Validation = static class
   private  
-    static function CrossValidateCore(model: ISupervisedModel; 
+    static function CrossValidateCore(model: IRegressor; 
       X: Matrix; y: Vector;
       folds: sequence of (array of integer, array of integer);
       metric: (Vector, Vector) -> real): real;
+    static function CrossValidateCore(model: IClassifier;
+      X: Matrix; y: array of integer;
+      folds: sequence of (array of integer, array of integer);
+      metric: (array of integer, array of integer) -> real): real;
   public
     /// Делит данные на обучающую и тестовую выборки.
     /// testRatio — доля объектов, попадающих в тестовую выборку (по умолчанию 0.2).
@@ -36,6 +40,8 @@ type
     /// Возвращает кортеж (X_train, X_test, y_train, y_test).
     static function TrainTestSplit(X: Matrix; y: Vector;
       testRatio: real := 0.2; seed: integer := -1): (Matrix, Matrix, Vector, Vector);
+    static function TrainTestSplit(X: Matrix; y: array of integer;
+      testRatio: real := 0.2; seed: integer := -1): (Matrix, Matrix, array of integer, array of integer);
 
     /// Разбивает индексы объектов на k непересекающихся частей (fold).
     /// На каждом шаге одна часть используется как тестовая, остальные — как обучающая выборка.
@@ -54,6 +60,8 @@ type
 /// Возвращает последовательность пар (trainIdx, testIdx)
     static function StratifiedKFold(y: Vector; k: integer;
       seed: integer := -1): sequence of (array of integer, array of integer);
+    static function StratifiedKFold(y: array of integer; k: integer;
+      seed: integer := -1): sequence of (array of integer, array of integer);
   
     /// Выполняет k-fold кросс-валидацию модели с учителем.
     /// На каждом шаге модель обучается на обучающей части и оценивается на соответствующей тестовой части.
@@ -61,10 +69,13 @@ type
     ///   и возвращающая значение метрики (например, Accuracy или MSE).
     /// Возвращает среднее значение метрики по всем частям.
     /// 
-    /// Метод принимает только ISupervisedModel, работающие с матричными данными
+    /// Перегрузка для регрессионных моделей.
     /// DataPipeline сюда передавать нельзя, так как он работает с DataFrame.
-    static function CrossValidate(model: ISupervisedModel; X: Matrix; y: Vector;
+    static function CrossValidate(model: IRegressor; X: Matrix; y: Vector;
       k: integer; metric: (Vector,Vector) -> real; seed: integer := -1): real;
+    /// Перегрузка для классификационных моделей.
+    static function CrossValidate(model: IClassifier; X: Matrix; y: array of integer;
+      k: integer; metric: (array of integer, array of integer) -> real; seed: integer := -1): real;
     
     /// Выполняет стратифицированную k-fold кросс-валидацию модели с учителем.
     /// Разбиение данных выполняется методом StratifiedKFold
@@ -72,10 +83,13 @@ type
     /// Рекомендуется для задач классификации, особенно при несбалансированных классах.
     /// Возвращает среднее значение метрики по k разбиениям.
     /// 
-    /// Метод принимает только ISupervisedModel, работающие с матричными данными
+    /// Перегрузка для регрессионных моделей.
     /// DataPipeline сюда передавать нельзя, так как он работает с DataFrame.
-    static function StratifiedCrossValidate(model: ISupervisedModel; X: Matrix; y: Vector;
+    static function StratifiedCrossValidate(model: IRegressor; X: Matrix; y: Vector;
       k: integer; metric: (Vector,Vector) -> real; seed: integer := -1): real;  
+    /// Перегрузка для классификационных моделей.
+    static function StratifiedCrossValidate(model: IClassifier; X: Matrix; y: array of integer;
+      k: integer; metric: (array of integer, array of integer) -> real; seed: integer := -1): real;
   end;
   
 /// Класс для подбора гиперпараметров методом перебора по сетке (Grid Search).
@@ -108,7 +122,17 @@ type
       maximize: boolean := True;
       stratified: boolean := False;
       seed: integer := -1
-    ): (P, real, T); where T: class, ISupervisedModel;
+    ): (P, real, T); where T: class, IRegressor;
+    class function Search<T, P>(
+      modelFactory: P -> T;
+      paramValues: array of P;
+      X: Matrix; y: array of integer;
+      k: integer;
+      metric: (array of integer, array of integer) -> real;
+      maximize: boolean := True;
+      stratified: boolean := False;
+      seed: integer := -1
+    ): (P, real, T); where T: class, IClassifier;
   end;
 
 implementation
@@ -138,14 +162,14 @@ const
     'Класс {0} содержит {1} объектов, что меньше числа фолдов ({2}). Уменьшите k или объедините малочисленные классы.!!' +
     'Class {0} has {1} samples, which is less than the number of folds ({2}). Reduce k or merge very small classes.';
   ER_STRATIFIED_K_TOO_LARGE =
-    'Stratified CV: число фолдов ({0}) превышает минимальный размер класса ({1})!!Stratified CV: number of folds ({0}) exceeds smallest class size ({1})';    
+    'Stratified CV: число фолдов ({0}) превышает минимальный размер класса ({1})!!Stratified CV: number of folds ({0}) exceeds smallest class size ({1})';
 
 //-----------------------------
 //         Validation
 //-----------------------------
 
 static function Validation.CrossValidateCore(
-  model: ISupervisedModel; 
+  model: IRegressor; 
   X: Matrix; 
   y: Vector;
   folds: sequence of (array of integer, array of integer);
@@ -180,8 +204,59 @@ begin
       yte[i] := y[r];
     end;
 
-    var m := model.Clone() as ISupervisedModel;
-    m := m.Fit(Xtr, ytr);
+    var m := model.Clone() as IRegressor;
+    m := m.Fit(Xtr, ytr) as IRegressor;
+
+    var pred := m.Predict(Xte);
+
+    total += metric(yte, pred);
+    foldsCount += 1;
+  end;
+
+  if foldsCount = 0 then
+    ArgumentError(ER_EMPTY_DATA, 'CrossValidate');
+
+  Result := total / foldsCount;
+end;
+
+static function Validation.CrossValidateCore(
+  model: IClassifier;
+  X: Matrix;
+  y: array of integer;
+  folds: sequence of (array of integer, array of integer);
+  metric: (array of integer, array of integer) -> real
+): real;
+begin
+  var total := 0.0;
+  var foldsCount := 0;
+  var p := X.ColCount;
+
+  foreach var (trainIdx, testIdx) in folds do
+  begin
+    var Xtr := new Matrix(trainIdx.Length, p);
+    var ytr := new integer[trainIdx.Length];
+
+    for var i := 0 to trainIdx.Length - 1 do
+    begin
+      var r := trainIdx[i];
+      for var j := 0 to p - 1 do
+        Xtr[i,j] := X[r,j];
+      ytr[i] := y[r];
+    end;
+
+    var Xte := new Matrix(testIdx.Length, p);
+    var yte := new integer[testIdx.Length];
+
+    for var i := 0 to testIdx.Length - 1 do
+    begin
+      var r := testIdx[i];
+      for var j := 0 to p - 1 do
+        Xte[i,j] := X[r,j];
+      yte[i] := y[r];
+    end;
+
+    var m := model.Clone() as IClassifier;
+    m := m.Fit(Xtr, ytr) as IClassifier;
 
     var pred := m.Predict(Xte);
 
@@ -233,6 +308,62 @@ begin
 
   var y_train := new Vector(trainSize);
   var y_test  := new Vector(testSize);
+
+  for var i := 0 to trainSize - 1 do
+  begin
+    var row := idx[i];
+    for var j := 0 to p - 1 do
+      X_train[i,j] := X[row,j];
+    y_train[i] := y[row];
+  end;
+
+  for var i := 0 to testSize - 1 do
+  begin
+    var row := idx[trainSize + i];
+    for var j := 0 to p - 1 do
+      X_test[i,j] := X[row,j];
+    y_test[i] := y[row];
+  end;
+
+  Result := (X_train, X_test, y_train, y_test);
+end;
+
+static function Validation.TrainTestSplit(X: Matrix; y: array of integer;
+  testRatio: real; seed: integer): (Matrix, Matrix, array of integer, array of integer);
+begin
+  if X = nil then
+    ArgumentNullError(ER_ARG_NULL, 'X');
+
+  if y = nil then
+    ArgumentNullError(ER_ARG_NULL, 'y');
+
+  if X.RowCount <> y.Length then
+    DimensionError(ER_DIM_MISMATCH_TRAIN_TEST, X.RowCount, y.Length);
+
+  if (testRatio <= 0.0) or (testRatio >= 1.0) then
+    ArgumentError(ER_TEST_RATIO_INVALID, testRatio);
+
+  var n := X.RowCount;
+  var p := X.ColCount;
+
+  if n < 2 then
+    ArgumentError(ER_DATASET_TOO_SMALL, 'TrainTestSplit');
+
+  var actualSeed := if seed >= 0 then seed else System.Environment.TickCount and integer.MaxValue;
+  var rnd := new System.Random(actualSeed);
+
+  var idx := Arr(0..n-1);
+  idx.Shuffle(rnd);
+
+  var rawSize := Round(n * testRatio);
+  var testSize := rawSize.Clamp(1, n - 1);
+  var trainSize := n - testSize;
+
+  var X_train := new Matrix(trainSize, p);
+  var X_test  := new Matrix(testSize, p);
+
+  var y_train := new integer[trainSize];
+  var y_test  := new integer[testSize];
 
   for var i := 0 to trainSize - 1 do
   begin
@@ -399,8 +530,96 @@ begin
   end;
 end;
 
+static function Validation.StratifiedKFold(y: array of integer; k: integer; seed: integer):
+  sequence of (array of integer, array of integer);
+begin
+  if y = nil then
+    ArgumentNullError(ER_ARG_NULL, 'y');
+
+  var n := y.Length;
+
+  if n <= 0 then
+    ArgumentError(ER_EMPTY_DATA, 'StratifiedKFold');
+
+  if (k < 2) or (k > n) then
+    ArgumentError(ER_K_INVALID_STRATIFIED, k, n);
+
+  var rnd :=
+    if seed >= 0 then new System.Random(seed)
+    else new System.Random;
+
+  var classMap := new Dictionary<integer, List<integer>>();
+
+  for var i := 0 to n - 1 do
+  begin
+    var cls := y[i];
+
+    var lst: List<integer>;
+    if classMap.TryGetValue(cls, lst) then
+      lst.Add(i)
+    else
+    begin
+      lst := new List<integer>;
+      lst.Add(i);
+      classMap.Add(cls, lst);
+    end;
+  end;
+
+  foreach var pair in classMap do
+  begin
+    var cls := pair.Key;
+    var cnt := pair.Value.Count;
+     if cnt < k then
+      ArgumentError(ER_STRATIFIED_CLASS_TOO_SMALL, cls, cnt, k);
+  end;
+
+  var folds := new List<integer>[k];
+  for var f := 0 to k - 1 do
+    folds[f] := new List<integer>;
+
+  foreach var pair in classMap do
+  begin
+    var indices := pair.Value;
+    indices.Shuffle(rnd);
+
+    var m := indices.Count;
+    var baseSize := m div k;
+    var extra := m mod k;
+    var start := 0;
+
+    for var fold := 0 to k - 1 do
+    begin
+      var size := baseSize + Ord(fold < extra);
+      for var t := 0 to size - 1 do
+        folds[fold].Add(indices[start + t]);
+      start += size;
+    end;
+  end;
+
+  for var fold := 0 to k - 1 do
+  begin
+    var testIdx := folds[fold].ToArray;
+
+    var mask := new boolean[n];
+    foreach var id in testIdx do
+      mask[id] := true;
+
+    var trainIdx := new integer[n - testIdx.Length];
+    var p := 0;
+
+    for var i := 0 to n - 1 do
+      if not mask[i] then
+      begin
+        trainIdx[p] := i;
+        p += 1;
+      end;
+
+    yield (trainIdx, testIdx);
+  end;
+end;
+
 static function Validation.CrossValidate(
-  model: ISupervisedModel; 
+  model: IRegressor; 
   X: Matrix; 
   y: Vector;
   k: integer; 
@@ -438,12 +657,90 @@ begin
   );
 end;
 
+static function Validation.CrossValidate(
+  model: IClassifier;
+  X: Matrix;
+  y: array of integer;
+  k: integer;
+  metric: (array of integer, array of integer) -> real;
+  seed: integer): real;
+begin
+  if model = nil then
+    ArgumentNullError(ER_ARG_NULL, 'model');
+
+  if X = nil then
+    ArgumentNullError(ER_ARG_NULL, 'X');
+
+  if y = nil then
+    ArgumentNullError(ER_ARG_NULL, 'y');
+
+  if metric = nil then
+    ArgumentNullError(ER_ARG_NULL, 'metric');
+
+  if X.RowCount <> y.Length then
+    DimensionError(ER_DIM_MISMATCH, X.RowCount, y.Length);
+
+  if (k < 2) or (k > X.RowCount) then
+    ArgumentError(ER_K_INVALID, k, X.RowCount);
+
+  var baseSeed :=
+    if seed >= 0 then seed
+    else System.Environment.TickCount and integer.MaxValue;
+
+  Result := CrossValidateCore(
+    model,
+    X,
+    y,
+    KFold(X.RowCount, k, baseSeed),
+    metric
+  );
+end;
+
 static function Validation.StratifiedCrossValidate(
-  model: ISupervisedModel; 
+  model: IRegressor; 
   X: Matrix; 
   y: Vector;
   k: integer; 
   metric: (Vector,Vector) -> real; 
+  seed: integer): real;
+begin
+  if model = nil then
+    ArgumentNullError(ER_ARG_NULL, 'model');
+
+  if X = nil then
+    ArgumentNullError(ER_ARG_NULL, 'X');
+
+  if y = nil then
+    ArgumentNullError(ER_ARG_NULL, 'y');
+
+  if metric = nil then
+    ArgumentNullError(ER_ARG_NULL, 'metric');
+
+  if X.RowCount <> y.Length then
+    DimensionError(ER_DIM_MISMATCH, X.RowCount, y.Length);
+
+  if (k < 2) or (k > X.RowCount) then
+    ArgumentError(ER_K_INVALID_STRATIFIED, k, X.RowCount);
+ 
+  var baseSeed :=
+    if seed >= 0 then seed
+    else System.Environment.TickCount and integer.MaxValue;
+
+  Result := CrossValidateCore(
+    model,
+    X,
+    y,
+    StratifiedKFold(y, k, baseSeed),
+    metric
+  );
+end;
+
+static function Validation.StratifiedCrossValidate(
+  model: IClassifier;
+  X: Matrix;
+  y: array of integer;
+  k: integer;
+  metric: (array of integer, array of integer) -> real;
   seed: integer): real;
 begin
   if model = nil then
@@ -491,7 +788,83 @@ class function GridSearch.Search<T, P>(
   maximize: boolean;
   stratified: boolean;
   seed: integer
-): (P, real, T); where T: class, ISupervisedModel;
+): (P, real, T); where T: class, IRegressor;
+begin
+  if modelFactory = nil then
+    ArgumentNullError(ER_ARG_NULL, 'modelFactory');
+
+  if paramValues = nil then
+    ArgumentNullError(ER_ARG_NULL, 'paramValues');
+
+  if paramValues.Length = 0 then
+    ArgumentError(ER_PARAM_VALUES_EMPTY);
+
+  if X = nil then
+    ArgumentNullError(ER_ARG_NULL, 'X');
+
+  if y = nil then
+    ArgumentNullError(ER_ARG_NULL, 'y');
+
+  if metric = nil then
+    ArgumentNullError(ER_ARG_NULL, 'metric');
+
+  if X.RowCount <> y.Length then
+    DimensionError(ER_DIM_MISMATCH, X.RowCount, y.Length);
+
+  var bestParam := paramValues[0];
+  var bestScore :=
+    if maximize then -1e308 else 1e308;
+
+  var baseSeed :=
+    if seed >= 0 then seed
+    else System.Environment.TickCount and integer.MaxValue;
+
+  foreach var param in paramValues do
+  begin
+    var model := modelFactory(param);
+    if model = nil then
+      ArgumentError(ER_MODEL_NULL);
+
+    var avgScore :=
+      if stratified then
+        Validation.StratifiedCrossValidate(model, X, y, k, metric, baseSeed)
+      else
+        Validation.CrossValidate(model, X, y, k, metric, baseSeed);
+
+    if double.IsNaN(avgScore) or double.IsInfinity(avgScore) then
+      ArgumentError(ER_INVALID_VALUE, 'avgScore');
+
+    var better :=
+      (maximize and (avgScore > bestScore)) or
+      (not maximize and (avgScore < bestScore));
+
+    if better then
+    begin
+      bestScore := avgScore;
+      bestParam := param;
+    end;
+  end;
+
+  var bestModel := modelFactory(bestParam);
+  if bestModel = nil then
+    ArgumentError(ER_MODEL_NULL);
+
+  bestModel := bestModel.Fit(X, y) as T;
+
+  Result := (bestParam, bestScore, bestModel);
+end;
+
+class function GridSearch.Search<T, P>(
+  modelFactory: P -> T;
+  paramValues: array of P;
+  X: Matrix;
+  y: array of integer;
+  k: integer;
+  metric: (array of integer, array of integer) -> real;
+  maximize: boolean;
+  stratified: boolean;
+  seed: integer
+): (P, real, T); where T: class, IClassifier;
 begin
   if modelFactory = nil then
     ArgumentNullError(ER_ARG_NULL, 'modelFactory');

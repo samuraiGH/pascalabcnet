@@ -45,16 +45,16 @@ begin
   knn.Fit(XTrain, yTrain);
 
   // --- предсказания (для визуализации)
-  var yLR := logreg.PredictLabels(X);
-  var yTree := tree.PredictLabels(X);
-  var yRF := rf.PredictLabels(X);
-  var yKNN := knn.PredictLabels(X);
+  var yLR := logreg.Predict(X);
+  var yTree := tree.Predict(X);
+  var yRF := rf.Predict(X);
+  var yKNN := knn.Predict(X);
 
   // --- test предсказания
-  var yLR_test := logreg.PredictLabels(XTest);
-  var yTree_test := tree.PredictLabels(XTest);
-  var yRF_test := rf.PredictLabels(XTest);
-  var yKNN_test := knn.PredictLabels(XTest);
+  var yLR_test := logreg.Predict(XTest);
+  var yTree_test := tree.Predict(XTest);
+  var yRF_test := rf.Predict(XTest);
+  var yKNN_test := knn.Predict(XTest);
 
   // --- метрики
   var accLR := Metrics.Accuracy(yTest, yLR_test);

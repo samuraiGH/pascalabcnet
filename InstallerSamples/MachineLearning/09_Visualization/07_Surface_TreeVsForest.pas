@@ -23,15 +23,15 @@ begin
 
   var x1 := X.Col(0);
   var x2 := X.Col(1);
-  var labels := LabelsToInts(y);
+  var labels := y;
 
   var fig := Plot.Grid(1, 2);
 
-  fig[0,0].Surface(x1, x2, 80, 80, G -> tree.PredictLabels(G), Palettes.Pastel);
+  fig[0,0].Surface(x1, x2, 80, 80, G -> tree.Predict(G), Palettes.Pastel);
   fig[0,0].Points(x1, x2, labels, size := 6);
   fig[0,0].Title := $'DecisionTree (Acc = {accTree:F3})';
 
-  fig[0,1].Surface(x1, x2, 80, 80, G -> forest.PredictLabels(G), Palettes.Pastel);
+  fig[0,1].Surface(x1, x2, 80, 80, G -> forest.Predict(G), Palettes.Pastel);
   fig[0,1].Points(x1, x2, labels, size := 6);
   fig[0,1].Title := $'RandomForest (Acc = {accForest:F3})';
 end.

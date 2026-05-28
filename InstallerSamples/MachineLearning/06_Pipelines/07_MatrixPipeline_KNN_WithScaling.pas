@@ -32,7 +32,7 @@ begin
 
   // Здесь масштабирование выполняется внутри pipeline автоматически.
   var pipe :=
-    MatrixPipeline.Build(
+    MatrixPipeline.BuildClassification(
       new StandardScaler,
       new KNNClassifier(5)
     );

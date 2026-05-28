@@ -40,7 +40,7 @@ begin
     var model := new KMeans(k, seed := 42);
 
     var pipe :=
-      UDataPipeline.Build(
+      DataPipeline.BuildClustering(
         features,
         new StandardScaler,
         model
@@ -48,7 +48,7 @@ begin
 
     pipe.Fit(df);
 
-    var labels := pipe.PredictLabels(df);
+    var labels := pipe.Predict(df);
     
     var dfT := pipe.Transform(df);
     var X := dfT.ToMatrix(features);
@@ -99,7 +99,7 @@ begin
 
   // --- финальная модель
   var pipe :=
-    UDataPipeline.Build(
+    DataPipeline.BuildClustering(
       features,
       new StandardScaler,
       model
@@ -107,7 +107,7 @@ begin
 
   pipe.Fit(df);
 
-  var labels := pipe.PredictLabels(df);
+  var labels := pipe.Predict(df);
   var X := df.ToMatrix(features);
 
   df.AddIntColumn('cluster', labels, nil);

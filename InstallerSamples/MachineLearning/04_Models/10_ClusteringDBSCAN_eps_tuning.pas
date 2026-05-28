@@ -47,9 +47,7 @@ begin
   foreach var eps in epsList do
   begin
     var model := new DBSCAN(eps, 5);
-    model.Fit(X);
-  
-    var labels := model.PredictLabels(X);
+    var labels := model.FitPredict(X);
   
     // --- статистика кластеров
     var counts := new Dictionary<integer, integer>();

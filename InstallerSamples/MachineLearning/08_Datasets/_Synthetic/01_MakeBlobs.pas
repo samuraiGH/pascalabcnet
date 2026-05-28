@@ -16,5 +16,5 @@ begin
   var xs := X.Col(0);
   var ys := X.Col(1);
   
-  Plot.Points(xs, ys, LabelsToInts(y), size := 4);
+  Plot.Points(xs, ys, y, size := 4);
 end.

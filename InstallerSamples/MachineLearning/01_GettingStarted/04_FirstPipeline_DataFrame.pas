@@ -25,8 +25,7 @@ begin
   // сначала масштабируем признаки,
   // затем обучаем логистическую регрессию
   var pipe :=
-    DataPipeline.Build(
-      TaskKind.tkClassification,
+    DataPipeline.BuildClassification(
       ds.Target,
       ds.Features,
       new StandardScaler,

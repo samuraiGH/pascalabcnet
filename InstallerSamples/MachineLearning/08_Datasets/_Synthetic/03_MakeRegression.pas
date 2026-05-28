@@ -7,12 +7,13 @@ begin
   var (X,y) := Datasets.MakeRegression(
     n := 500,
     nFeatures := 1,
+    nInformative := 1,
     noise := 0.2,
     seed := 1
   );
 
   // --- визуализация
-  Plot.Title('MakeRegression синтетический датасет');
+  Plot.Title := 'MakeRegression синтетический датасет';
   Plot.XLabel := 'признак';
   Plot.YLabel := 'целевая переменная';
 

@@ -17,11 +17,10 @@ begin
 
   var kmeans := new KMeans(2, seed := 42);
   kmeans.Fit(X);
-  var yKMeans := kmeans.PredictLabels(X);
+  var yKMeans := kmeans.Predict(X);
 
   var dbscan := new DBSCAN(0.22, 5);
-  dbscan.Fit(X);
-  var yDBSCAN := dbscan.PredictLabels(X);
+  var yDBSCAN := dbscan.FitPredict(X);
 
   var ariKMeans := ClusteringMetrics.AdjustedRandIndex(yTrue, yKMeans);
   var ariDBSCAN := ClusteringMetrics.AdjustedRandIndex(yTrue, yDBSCAN);

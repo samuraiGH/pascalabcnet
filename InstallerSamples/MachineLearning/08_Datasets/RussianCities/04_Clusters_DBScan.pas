@@ -72,9 +72,7 @@ begin
   foreach var eps in [0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0] do
   begin
     var model := new DBSCAN(eps, 5);
-    model.Fit(X);
-  
-    var labels := model.PredictLabels(X);
+    var labels := model.FitPredict(X);
   
     var counts := labels.EachCount;
   
@@ -132,9 +130,7 @@ begin
 
   // --- финальная модель
   var model := new DBSCAN(bestEps, 5);
-  model.Fit(X);
-
-  var labels := model.PredictLabels(X);
+  var labels := model.FitPredict(X);
   df.AddIntColumn('cluster_db', labels, nil);
 
   // --- итог

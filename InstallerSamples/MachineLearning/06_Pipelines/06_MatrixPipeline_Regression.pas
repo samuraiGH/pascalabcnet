@@ -1,4 +1,4 @@
-// В этом примере MatrixPipeline используется
+﻿// В этом примере MatrixPipeline используется
 // для задачи регрессии.
 
 uses MLABC;
@@ -6,7 +6,7 @@ uses MLABC;
 begin
   var ds := Datasets.MoscowHousing;
 
-  var features := ['area', 'rooms', 'floor', 'max_floor', 'distance_to_metro', 'building_age'];
+  var features := ['rooms', 'area', 'kitchen_area', 'floor', 'floors_total', 'metro_minutes'];
 
   var (trainDs, testDs) := ds.TrainTestSplit(testRatio := 0.2, seed := 42);
 
@@ -17,7 +17,7 @@ begin
   var yTest := testDs.Data.ToVector(ds.Target);
 
   var pipe :=
-    MatrixPipeline.Build(
+    MatrixPipeline.BuildRegression(
       new StandardScaler,
       new LinearRegression
     );

@@ -85,27 +85,15 @@ type
     /// Показывает, какая часть объектов классифицирована верно.
     /// Удобна, когда классы примерно сбалансированы.
     /// Пример: Accuracy = 0.9 означает 90% правильных ответов.
-    static function Accuracy(yTrue, yPred: Vector): real;
-    
-    /// Доля правильных предсказаний.
-    /// Показывает, какая часть объектов классифицирована верно.
-    /// Удобна, когда классы примерно сбалансированы.
-    /// Пример: Accuracy = 0.9 означает 90% правильных ответов.
     static function Accuracy(yTrue, yPred: array of integer): real;
     
-    /// Доля правильных предсказаний.
-    /// Показывает, какая часть объектов классифицирована верно.
-    /// Удобна, когда классы примерно сбалансированы.
-    /// Пример: Accuracy = 0.9 означает 90% правильных ответов.
-    static function Accuracy(yTrue: Vector; yPred: array of integer): real;
-
     /// Точность (Precision) для положительного класса (1).
     /// Precision = TP / (TP + FP)
     /// Среди всех объектов, которые модель предсказала как положительные (1),
     /// показывает долю действительно принадлежащих этому классу.
     /// Используется только для бинарной классификации.
     /// Важна, когда критичны ложные положительные результаты («ложные тревоги»).
-    static function Precision(yTrue, yPred: Vector): real;
+    static function Precision(yTrue, yPred: array of integer): real;
     
     /// Точность (Precision) с усреднением по классам.
     /// Вычисляется для каждого класса отдельно как:
@@ -115,7 +103,7 @@ type
     ///   avMicro    — глобальная метрика по суммарным TP и FP;
     ///   avWeighted — среднее с весами, пропорциональными размеру классов.
     /// Особенно полезна для многоклассовой классификации.
-    static function Precision(yTrue, yPred: Vector; avg: Averaging): real;
+    static function Precision(yTrue, yPred: array of integer; avg: Averaging): real;
     
     /// Полнота (Recall) для положительного класса (1).
     /// Recall = TP / (TP + FN)
@@ -123,7 +111,7 @@ type
     /// показывает долю правильно найденных моделью.
     /// Используется только для бинарной классификации.
     /// Важна, когда нежелательны пропуски положительных случаев (например, заболеваний).
-    static function Recall(yTrue, yPred: Vector): real;
+    static function Recall(yTrue, yPred: array of integer): real;
     
     /// Полнота (Recall) с усреднением по классам.
     /// Вычисляется для каждого класса отдельно как:
@@ -133,7 +121,7 @@ type
     ///   avMicro    — глобальная метрика по суммарным TP и FN;
     ///   avWeighted — среднее с весами, пропорциональными размеру классов.
     /// Особенно полезна для многоклассовой классификации.
-    static function Recall(yTrue, yPred: Vector; avg: Averaging): real;
+    static function Recall(yTrue, yPred: array of integer; avg: Averaging): real;
     
     /// F1-мера для бинарной классификации.
     /// F1 = 2 * (Precision * Recall) / (Precision + Recall)
@@ -141,7 +129,7 @@ type
     /// Принимает высокие значения только тогда, когда оба показателя высоки.
     /// Используется только для бинарной классификации.
     /// Особенно полезна при несбалансированных классах.
-    static function F1(yTrue, yPred: Vector): real;
+    static function F1(yTrue, yPred: array of integer): real;
     
     /// F1-мера с усреднением по классам.
     /// Вычисляется для каждого класса отдельно как:
@@ -151,14 +139,14 @@ type
     ///   avMicro    — вычисляется по суммарным TP, FP и FN;
     ///   avWeighted — среднее с весами, пропорциональными размеру классов.
     /// Особенно полезна для многоклассовой классификации.
-    static function F1(yTrue, yPred: Vector; avg: Averaging): real;
+    static function F1(yTrue, yPred: array of integer; avg: Averaging): real;
 
     /// Специфичность (Specificity, True Negative Rate) для бинарной классификации.
     /// Specificity = TN / (TN + FP)
     /// Доля объектов отрицательного класса (0), правильно распознанных моделью.
     /// Показывает способность модели корректно распознавать отрицательный класс.
     /// Используется только для бинарной классификации.
-    static function Specificity(yTrue, yPred: Vector): real;
+    static function Specificity(yTrue, yPred: array of integer): real;
     
     /// Сбалансированная точность (Balanced Accuracy) для бинарной классификации.
     /// Balanced Accuracy = (Recall + Specificity) / 2
@@ -166,36 +154,36 @@ type
     /// и специфичности (Specificity, доли истинно отрицательных).
     /// Устойчива к дисбалансу классов.
     /// Используется только для бинарной классификации
-    static function BalancedAccuracy(yTrue, yPred: Vector): real;
+    static function BalancedAccuracy(yTrue, yPred: array of integer): real;
     
-    static function ClassificationReport(yTrue, yPred: Vector): string;
+    static function ClassificationReport(yTrue, yPred: array of integer): string;
     
     /// Вычисляет силуэт (Silhouette) для каждой точки.
     /// Для каждой строки матрицы X возвращает значение s(i) в диапазоне [-1, 1].
     /// Требует как минимум 2 различных кластера.
     /// Использует евклидово расстояние (квадратный корень не извлекается).
     /// Сложность O(n²) - для умеренных размеров данных.
-    static function SilhouetteSamples(X: Matrix; labels: Vector): Vector;
+    static function SilhouetteSamples(X: Matrix; labels: array of integer): Vector;
   
     /// Вычисляет средний силуэт (Silhouette Score).
     /// Возвращает среднее значение Silhouette по всем точкам.
     /// Чем ближе к 1 — тем лучше разделены кластеры.
     /// Значение около 0 означает пересечение кластеров.
     /// Отрицательное значение указывает на возможную ошибку кластеризации
-    static function SilhouetteScore(X: Matrix; labels: Vector): real;
+    static function SilhouetteScore(X: Matrix; labels: array of integer): real;
     
     /// Вычисляет индекс Калински–Харабаса (Calinski–Harabasz Index).
     /// Возвращает отношение межкластерной дисперсии к внутрикластерной дисперсии.
     /// Чем больше значение — тем лучше разделены кластеры.
     /// Требует как минимум 2 кластера и n > k.
     /// Сложность O(n·p).
-    static function CalinskiHarabaszScore(X: Matrix; labels: Vector): real;
+    static function CalinskiHarabaszScore(X: Matrix; labels: array of integer): real;
     
     /// Вычисляет индекс Дэвиса–Булдина (Davies–Bouldin Index).
     /// Чем меньше значение — тем лучше разделены кластеры.
     /// Требует минимум 2 кластера.
     /// Сложность O(n·p + k²·p).
-    static function DaviesBouldinScore(X: Matrix; labels: Vector): real;
+    static function DaviesBouldinScore(X: Matrix; labels: array of integer): real;
     
     /// Adjusted Rand Index (ARI).
     /// Внешняя метрика качества кластеризации.
@@ -211,7 +199,7 @@ type
     /// 1   — идеальное совпадение кластеризации и истинных меток
     /// 0   — случайное разбиение
     /// <0  — хуже случайного
-    static function AdjustedRandIndex(yTrue, yPred: Vector): real;
+    static function AdjustedRandIndex(yTrue, yPred: array of integer): real;
   end;
   
 type  
@@ -255,7 +243,7 @@ type
   public
     /// Создаёт матрицу ошибок по истинным меткам yTrue и предсказаниям модели yPred.
     ///
-    /// Векторы должны иметь одинаковую длину и содержать целочисленные метки классов.
+    /// Массивы должны иметь одинаковую длину и содержать целочисленные метки классов.
     ///
     /// Можно использовать любые целые метки классов. При построении матрицы они
     /// автоматически перенумеровываются числами от 0 до K-1, где K — число
@@ -265,7 +253,7 @@ type
     /// как класс j.
     ///
     /// Для бинарной классификации дополнительно доступны значения TP, TN, FP и FN
-    constructor Create(yTrue, yPred: Vector);
+    constructor Create(yTrue, yPred: array of integer);
         
     /// Возвращает исходную метку класса по его внутреннему номеру.
     ///
@@ -424,21 +412,7 @@ type
     /// Показывает долю верно классифицированных объектов.
     /// Применима как для бинарной, так и для многоклассовой классификации.
     /// Удобна, когда классы примерно сбалансированы.
-    static function Accuracy(yTrue, yPred: Vector): real := Metrics.Accuracy(yTrue, yPred);
-    
-    /// Доля правильных предсказаний (Accuracy).
-    /// Accuracy = (число правильных предсказаний) / (общее число объектов).
-    /// Показывает долю верно классифицированных объектов.
-    /// Применима как для бинарной, так и для многоклассовой классификации.
-    /// Удобна, когда классы примерно сбалансированы.
     static function Accuracy(yTrue, yPred: array of integer): real := Metrics.Accuracy(yTrue, yPred);
-    
-    /// Доля правильных предсказаний (Accuracy).
-    /// Accuracy = (число правильных предсказаний) / (общее число объектов).
-    /// Показывает долю верно классифицированных объектов.
-    /// Применима как для бинарной, так и для многоклассовой классификации.
-    /// Удобна, когда классы примерно сбалансированы.
-    static function Accuracy(yTrue: Vector; yPred: array of integer): real := Metrics.Accuracy(yTrue, yPred);
     
     /// Точность (Precision) для положительного класса (1).
     /// Precision = TP / (TP + FP)
@@ -446,7 +420,7 @@ type
     /// показывает долю действительно принадлежащих этому классу.
     /// Используется только для бинарной классификации.
     /// Важна, когда критичны ложные положительные результаты («ложные тревоги»).
-    static function Precision(yTrue, yPred: Vector): real := Metrics.Precision(yTrue, yPred);
+    static function Precision(yTrue, yPred: array of integer): real := Metrics.Precision(yTrue, yPred);
     
     /// Полнота (Recall) для положительного класса (1).
     /// Recall = TP / (TP + FN)
@@ -454,7 +428,7 @@ type
     /// показывает долю правильно найденных моделью.
     /// Используется только для бинарной классификации.
     /// Важна, когда нежелательны пропуски положительных случаев (например, заболеваний).
-    static function Recall(yTrue, yPred: Vector): real := Metrics.Recall(yTrue, yPred);
+    static function Recall(yTrue, yPred: array of integer): real := Metrics.Recall(yTrue, yPred);
     
     /// F1-мера для бинарной классификации.
     /// F1 = 2 * (Precision * Recall) / (Precision + Recall)
@@ -462,14 +436,14 @@ type
     /// Принимает высокие значения только тогда, когда оба показателя высоки.
     /// Особенно полезна при несбалансированных классах.
     /// Используется только для бинарной классификации.
-    static function F1(yTrue, yPred: Vector): real := Metrics.F1(yTrue, yPred);
+    static function F1(yTrue, yPred: array of integer): real := Metrics.F1(yTrue, yPred);
     
     /// Специфичность (Specificity, True Negative Rate) для бинарной классификации.
     /// Specificity = TN / (TN + FP)
     /// Доля объектов отрицательного класса (0), правильно распознанных моделью.
     /// Показывает способность модели корректно распознавать отрицательный класс.
     /// Используется только для бинарной классификации.
-    static function Specificity(yTrue, yPred: Vector): real := Metrics.Specificity(yTrue, yPred);
+    static function Specificity(yTrue, yPred: array of integer): real := Metrics.Specificity(yTrue, yPred);
     
     /// Сбалансированная точность (Balanced Accuracy) для бинарной классификации.
     /// Balanced Accuracy = (Recall + Specificity) / 2
@@ -477,7 +451,7 @@ type
     /// и специфичности (Specificity).
     /// Устойчива к дисбалансу классов.
     /// Используется только для бинарной классификации.
-    static function BalancedAccuracy(yTrue, yPred: Vector): real := Metrics.BalancedAccuracy(yTrue, yPred);
+    static function BalancedAccuracy(yTrue, yPred: array of integer): real := Metrics.BalancedAccuracy(yTrue, yPred);
     
     /// Логарифмическая функция потерь (LogLoss) для бинарной классификации.
     /// LogLoss = - (1/n) * Σ [yTrue * log(yProb) + (1 - yTrue) * log(1 - yProb)]
@@ -508,7 +482,7 @@ type
     /// Формирует текстовый отчёт по качеству классификации.
     /// Для каждого класса выводит Precision, Recall, F1 и число объектов этого класса.
     /// Также выводит усреднённые показатели по всем классам.
-    static function ClassificationReport(yTrue, yPred: Vector): string := Metrics.ClassificationReport(yTrue, yPred);
+    static function ClassificationReport(yTrue, yPred: array of integer): string := Metrics.ClassificationReport(yTrue, yPred);
   end;  
   
   /// Метрики для оценки качества регрессионных моделей
@@ -574,28 +548,28 @@ type
     ///   s(i) < 0  — точка, вероятно, попала не в свой кластер
     /// Требует как минимум 2 различных кластера
     /// Сложность O(n²) — для умеренных размеров данных
-    static function SilhouetteSamples(X: Matrix; labels: Vector): Vector := Metrics.SilhouetteSamples(x, labels);  
+    static function SilhouetteSamples(X: Matrix; labels: array of integer): Vector := Metrics.SilhouetteSamples(x, labels);  
     
     /// Вычисляет средний силуэт (Silhouette Score)
     /// Возвращает среднее значение Silhouette по всем точкам
     /// Чем ближе к 1 — тем лучше разделены кластеры
     /// Значение около 0 означает пересечение кластеров
     /// Отрицательное значение указывает на возможную ошибку кластеризации
-    static function SilhouetteScore(X: Matrix; labels: Vector): real := Metrics.SilhouetteScore(x, labels);  
+    static function SilhouetteScore(X: Matrix; labels: array of integer): real := Metrics.SilhouetteScore(x, labels);  
     
     /// Индекс Калински–Харабаса (Calinski–Harabasz Index)
     /// Возвращает отношение межкластерной дисперсии к внутрикластерной дисперсии
     /// Чем больше значение — тем лучше разделены кластеры
     /// Требует как минимум 2 кластера и n > k
     /// Сложность O(n·p)
-    static function CalinskiHarabaszScore(X: Matrix; labels: Vector): real := Metrics.CalinskiHarabaszScore(x, labels);
+    static function CalinskiHarabaszScore(X: Matrix; labels: array of integer): real := Metrics.CalinskiHarabaszScore(x, labels);
     
     /// Индекс Дэвиса–Булдина (Davies–Bouldin Index)
     /// Чем меньше значение — тем лучше разделены кластеры
     /// Минимальное значение 0 (идеальное разделение)
     /// Требует минимум 2 кластера
     /// Сложность O(n·p + k²·p)
-    static function DaviesBouldinScore(X: Matrix; labels: Vector): real := Metrics.DaviesBouldinScore(x, labels);
+    static function DaviesBouldinScore(X: Matrix; labels: array of integer): real := Metrics.DaviesBouldinScore(x, labels);
     
     // ========== ВНЕШНИЕ МЕТРИКИ (с эталонными метками) ==========
     
@@ -608,7 +582,7 @@ type
     ///   1.0 — идеальное совпадение кластеризации и истинных меток
     ///   0.0 — случайное разбиение
     ///   <0  — хуже случайного
-    static function AdjustedRandIndex(yTrue, yPred: Vector): real := Metrics.AdjustedRandIndex(yTrue, yPred);
+    static function AdjustedRandIndex(yTrue, yPred: array of integer): real := Metrics.AdjustedRandIndex(yTrue, yPred);
   end;
 
 implementation  
@@ -635,8 +609,6 @@ const
     'Для Calinski–Harabasz требуется минимум 2 кластера!!Calinski–Harabasz requires at least 2 clusters';
   ER_CH_NEEDS_N_GT_K =
     'Для Calinski–Harabasz требуется n > k!!Calinski–Harabasz requires n > k';
-  ER_LABELS_MUST_BE_INTEGERS =
-    'Метки кластеров должны быть целыми числами!!Cluster labels must be integers';    
   ER_MAPE_ALL_ZERO_TARGET =
     'Все значения целевой переменной равны нулю — MAPE не определена!!All target values are zero — MAPE is undefined';
   ER_BINARY_ONLY =
@@ -1016,44 +988,6 @@ begin
   Result := area;
 end;
 
-static function Metrics.Accuracy(yTrue, yPred: Vector): real;
-begin
-  if yTrue = nil then
-    ArgumentNullError(ER_ARG_NULL, 'yTrue');
-
-  if yPred = nil then
-    ArgumentNullError(ER_ARG_NULL, 'yPred');
-
-  var n := yTrue.Length;
-
-  if n <> yPred.Length then
-    DimensionError(ER_DIM_MISMATCH, yTrue.Length, yPred.Length);
-
-  if n = 0 then
-    ArgumentError(ER_EMPTY_DATA, 'Accuracy');
-
-  var correct := 0;
-
-  for var i := 0 to n - 1 do
-  begin
-    var yt := yTrue[i];
-    var yp := yPred[i];
-    var ytInt := Round(yt);
-    var ypInt := Round(yp);
-    
-    if Abs(yt - ytInt) > 1e-12 then
-      ArgumentError(ER_INVALID_CLASS_LABEL, yt);
-    
-    if Abs(yp - ypInt) > 1e-12 then
-      ArgumentError(ER_INVALID_CLASS_LABEL, yp);
-    
-    if ytInt = ypInt then
-      correct += 1;
-  end;
-
-  Result := correct / n;
-end;
-
 static function Metrics.Accuracy(yTrue, yPred: array of integer): real;
 begin
   if yTrue = nil then
@@ -1079,54 +1013,25 @@ begin
   Result := correct / n;
 end;
 
-static function Metrics.Accuracy(yTrue: Vector; yPred: array of integer): real;
+static function Metrics.Precision(yTrue, yPred: array of integer): real;
 begin
-  if yTrue = nil then
-    ArgumentNullError(ER_ARG_NULL, 'yTrue');
-
-  var data := yTrue.Data;
-  var n := data.Length;
-
-  if n <> yPred.Length then
-    DimensionError(ER_DIM_MISMATCH, n, yPred.Length);
-
-  if n = 0 then
-    ArgumentError(ER_EMPTY_DATA, 'Accuracy');
-
-  var correct := 0;
-
-  for var i := 0 to n - 1 do
-  begin
-    var yt := data[i];
-    var ytInt := Round(yt);
-
-    // проверка: метки должны быть целыми
-    if Abs(yt - ytInt) > 1e-12 then
-      ArgumentError(ER_INVALID_CLASS_LABEL, yt);
-
-    if ytInt = yPred[i] then
-      correct += 1;
-  end;
-
-  Result := correct / n;
+  var cm := new ConfusionMatrix(yTrue, yPred);
+  Result := cm.Precision;
 end;
 
-static function Metrics.Precision(yTrue, yPred: Vector): real;
+static function Metrics.Recall(yTrue, yPred: array of integer): real;
 begin
-  Result := ConfusionMatrix.Create(yTrue, yPred).Precision;
+  var cm := new ConfusionMatrix(yTrue, yPred);
+  Result := cm.Recall;
 end;
 
-static function Metrics.Recall(yTrue, yPred: Vector): real;
+static function Metrics.F1(yTrue, yPred: array of integer): real;
 begin
-  Result := ConfusionMatrix.Create(yTrue, yPred).Recall;
+  var cm := new ConfusionMatrix(yTrue, yPred);
+  Result := cm.F1;
 end;
 
-static function Metrics.F1(yTrue, yPred: Vector): real;
-begin
-  Result := ConfusionMatrix.Create(yTrue, yPred).F1;
-end;
-
-static function Metrics.Precision(yTrue, yPred: Vector; avg: Averaging): real;
+static function Metrics.Precision(yTrue, yPred: array of integer; avg: Averaging): real;
 begin
   var cm := new ConfusionMatrix(yTrue, yPred);
   var k := cm.ClassCount;
@@ -1187,7 +1092,7 @@ begin
   Result := 0.0;
 end;
 
-static function Metrics.Recall(yTrue, yPred: Vector; avg: Averaging): real;
+static function Metrics.Recall(yTrue, yPred: array of integer; avg: Averaging): real;
 begin
   var cm := new ConfusionMatrix(yTrue, yPred);
   var k := cm.ClassCount;
@@ -1248,7 +1153,7 @@ begin
   Result := 0.0;
 end;
 
-static function Metrics.F1(yTrue, yPred: Vector; avg: Averaging): real;
+static function Metrics.F1(yTrue, yPred: array of integer; avg: Averaging): real;
 begin
   var cm := new ConfusionMatrix(yTrue, yPred);
   var k := cm.ClassCount;
@@ -1311,17 +1216,19 @@ begin
   Result := 0.0;
 end;
 
-static function Metrics.Specificity(yTrue, yPred: Vector): real;
+static function Metrics.Specificity(yTrue, yPred: array of integer): real;
 begin
-  Result := ConfusionMatrix.Create(yTrue, yPred).Specificity;
+  var cm := new ConfusionMatrix(yTrue, yPred);
+  Result := cm.Specificity;
 end;
 
-static function Metrics.BalancedAccuracy(yTrue, yPred: Vector): real;
+static function Metrics.BalancedAccuracy(yTrue, yPred: array of integer): real;
 begin
-  Result := ConfusionMatrix.Create(yTrue, yPred).BalancedAccuracy;
+  var cm := new ConfusionMatrix(yTrue, yPred);
+  Result := cm.BalancedAccuracy;
 end;
 
-static function Metrics.SilhouetteSamples(X: Matrix; labels: Vector): Vector;
+static function Metrics.SilhouetteSamples(X: Matrix; labels: array of integer): Vector;
 begin
   if X = nil then
     ArgumentNullError(ER_ARG_NULL, 'X');
@@ -1344,12 +1251,7 @@ begin
 
   for var i := 0 to n - 1 do
   begin
-    var v := labels[i];
-    var lab := integer(v);
-
-    if Abs(v - lab) > 1e-12 then
-      ArgumentError(ER_LABELS_MUST_BE_INTEGERS);
-
+    var lab := labels[i];
     var id: integer;
     if map.TryGetValue(lab, id) then
     begin
@@ -1441,7 +1343,7 @@ begin
   end;
 end;
 
-static function Metrics.SilhouetteScore(X: Matrix; labels: Vector): real;
+static function Metrics.SilhouetteScore(X: Matrix; labels: array of integer): real;
 begin
   var s := SilhouetteSamples(X, labels);
 
@@ -1463,7 +1365,7 @@ end;
 /// При нулевой внутрикластерной дисперсии возвращает +∞.
 /// Требует как минимум 2 кластера и n > k.
 /// Сложность O(n·p).
-static function Metrics.CalinskiHarabaszScore(X: Matrix; labels: Vector): real;
+static function Metrics.CalinskiHarabaszScore(X: Matrix; labels: array of integer): real;
 begin
   if X = nil then
     ArgumentNullError(ER_ARG_NULL, 'X');
@@ -1487,12 +1389,7 @@ begin
 
   for var i := 0 to n - 1 do
   begin
-    var v := labels[i];
-    var lab := integer(v);
-
-    if Abs(v - lab) > 1e-12 then
-      ArgumentError(ER_LABELS_MUST_BE_INTEGERS);
-
+    var lab := labels[i];
     var id: integer;
     if map.TryGetValue(lab, id) then
     begin
@@ -1591,7 +1488,7 @@ begin
   Result := ch;
 end;
 
-static function Metrics.DaviesBouldinScore(X: Matrix; labels: Vector): real;
+static function Metrics.DaviesBouldinScore(X: Matrix; labels: array of integer): real;
 begin
   if X = nil then
     ArgumentNullError(ER_ARG_NULL, 'X');
@@ -1612,12 +1509,7 @@ begin
 
   for var i := 0 to n - 1 do
   begin
-    var v := labels[i];
-    var lab := integer(v);
-
-    if Abs(v - lab) > 1e-12 then
-      ArgumentError(ER_LABELS_MUST_BE_INTEGERS);
-
+    var lab := labels[i];
     var id: integer;
     if map.TryGetValue(lab, id) then
     begin
@@ -1725,7 +1617,7 @@ end;
 /// Использует таблицу сопряжённости (contingency table).
 /// Сложность: O(n + kT * kP),
 /// где kT и kP — числа различных классов в yTrue и yPred.
-static function Metrics.AdjustedRandIndex(yTrue, yPred: Vector): real;
+static function Metrics.AdjustedRandIndex(yTrue, yPred: array of integer): real;
 begin
   if yTrue = nil then
     ArgumentNullError(ER_ARG_NULL, 'yTrue');
@@ -1743,16 +1635,12 @@ begin
     exit;
   end;
 
-  // --- Vector -> int[]
-  var yTInt := LabelsToInts(yTrue);
-  var yPInt := LabelsToInts(yPred);
-
   // --- encoding
   var classesTrue: array of integer;
   var classesPred: array of integer;
 
-  var yT := EncodeLabelsInt(yTInt, classesTrue);
-  var yP := EncodeLabelsInt(yPInt, classesPred);
+  var yT := EncodeLabelsInt(yTrue, classesTrue);
+  var yP := EncodeLabelsInt(yPred, classesPred);
 
   var kT := classesTrue.Length;
   var kP := classesPred.Length;
@@ -1820,7 +1708,7 @@ begin
   Result := s.PadLeft(w);
 end;
 
-static function Metrics.ClassificationReport(yTrue, yPred: Vector): string;
+static function Metrics.ClassificationReport(yTrue, yPred: array of integer): string;
 begin
   var cm := new ConfusionMatrix(yTrue, yPred);
 
@@ -1932,7 +1820,7 @@ end;
 //        ConfusionMatrix
 //-----------------------------
 
-constructor ConfusionMatrix.Create(yTrue, yPred: Vector);
+constructor ConfusionMatrix.Create(yTrue, yPred: array of integer);
 begin
   if yTrue = nil then
     ArgumentNullError(ER_ARG_NULL, 'yTrue');
@@ -1948,34 +1836,13 @@ begin
   if n = 0 then
     ArgumentError(ER_EMPTY_DATA, 'ConfusionMatrix');
 
-  var yArr := yTrue.Data;
-  var pArr := yPred.Data;
-
   // --- 1. собираем уникальные метки
   var setLabels := new HashSet<integer>;
 
   for var i := 0 to n - 1 do
   begin
-    var yt := yArr[i];
-    var yp := pArr[i];
-
-    if double.IsNaN(yt) or double.IsInfinity(yt) then
-      ArgumentError(ER_INVALID_VALUE, 'yTrue', i);
-
-    if double.IsNaN(yp) or double.IsInfinity(yp) then
-      ArgumentError(ER_INVALID_VALUE, 'yPred', i);
-
-    var ytInt := Round(yt);
-    var ypInt := Round(yp);
-
-    if Abs(yt - ytInt) > 1e-12 then
-      ArgumentError(ER_INVALID_CLASS_LABEL, yt);
-
-    if Abs(yp - ypInt) > 1e-12 then
-      ArgumentError(ER_INVALID_CLASS_LABEL, yp);
-
-    setLabels.Add(ytInt);
-    setLabels.Add(ypInt);
+    setLabels.Add(yTrue[i]);
+    setLabels.Add(yPred[i]);
   end;
 
   // --- 2. сортируем метки
@@ -1998,8 +1865,8 @@ begin
   // --- 5. заполняем
   for var i := 0 to n - 1 do
   begin
-    var yt := integer(yArr[i]);
-    var yp := integer(pArr[i]);
+    var yt := yTrue[i];
+    var yp := yPred[i];
 
     var row := fLabelToIndex[yt];
     var col := fLabelToIndex[yp];

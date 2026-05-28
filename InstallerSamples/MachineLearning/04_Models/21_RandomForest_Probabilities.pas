@@ -8,8 +8,7 @@ begin
   var (trainDs, testDs) := ds.StratifiedTrainTestSplit(testRatio := 0.2, seed := 42);
 
   var pipe :=
-    DataPipeline.Build(
-      TaskKind.tkClassification,
+    DataPipeline.BuildClassification(
       ds.Target,
       ds.Features,
       new RandomForestClassifier(nTrees := 100, maxDepth := 6, seed := 42)

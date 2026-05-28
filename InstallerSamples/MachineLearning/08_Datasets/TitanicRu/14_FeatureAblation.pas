@@ -3,8 +3,7 @@
 function BuildPipe(features: array of string): DataPipeline;
 begin
   Result :=
-    DataPipeline.Build(
-      TaskKind.tkClassification,
+    DataPipeline.BuildClassification(
       'Выжил',
       features,
       new Imputer(['Возраст']),
