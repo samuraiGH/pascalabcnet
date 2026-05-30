@@ -370,6 +370,12 @@ type
     function Join(other: DataFrame; keys: array of string; kind: JoinKind := jkInner): DataFrame; 
     /// Соединяет с другим DataFrame по разным именам ключей
     function Join(other: DataFrame; leftKeys, rightKeys: array of string; kind: JoinKind := jkInner): DataFrame; 
+
+    /// Склеивает несколько DataFrame по строкам.
+    /// Все таблицы должны иметь одинаковую схему:
+    /// имена столбцов, их порядок, типы и categorical-флаги должны совпадать.
+    /// Возвращает новый DataFrame.
+    static function Concat(params dfs: array of DataFrame): DataFrame;
     
     /// Выводит DataFrame с настраиваемым числом строк 
     procedure Print(maxRows: integer := 10; headRows: integer := -1; decimals: integer := 2);
@@ -618,6 +624,13 @@ const
     'CSV format error: expected {0} columns, got {1}';
   ER_EMPTY_CSV =
     'CSV-файл пуст!!Empty CSV';
+  ER_CONCAT_EMPTY =
+    'DataFrame.Concat требует хотя бы один DataFrame!!DataFrame.Concat requires at least one DataFrame';
+  ER_CONCAT_DF_NULL =
+    'DataFrame.Concat не принимает nil-таблицы!!DataFrame.Concat does not accept nil dataframes';
+  ER_CONCAT_SCHEMA_MISMATCH =
+    'DataFrame.Concat требует одинаковую схему: имена, порядок, типы и categorical-флаги столбцов должны совпадать!!' +
+    'DataFrame.Concat requires identical schema: column names, order, types, and categorical flags must match';
   ER_CSV_UNCLOSED_QUOTE =
     'Ошибка формата CSV: незакрытая кавычка!!CSV format error: unclosed quote';
   ER_CSV_INVALID_BOOL =
@@ -4453,6 +4466,129 @@ end;
 static function DataFrame.FromCsvText(text: string): DataFrame;
 begin
   Result := CsvLoader.LoadFromLines(text.ToLines);
+end;
+
+static function DataFrame.Concat(params dfs: array of DataFrame): DataFrame;
+begin
+  if (dfs = nil) or (dfs.Length = 0) then
+    ArgumentError(ER_CONCAT_EMPTY);
+
+  for var i := 0 to dfs.Length - 1 do
+    if dfs[i] = nil then
+      ArgumentError(ER_CONCAT_DF_NULL);
+
+  var first := dfs[0];
+  var schema := first.fSchema;
+
+  for var di := 1 to dfs.Length - 1 do
+  begin
+    var curSchema := dfs[di].fSchema;
+
+    if curSchema.ColumnCount <> schema.ColumnCount then
+      ArgumentError(ER_CONCAT_SCHEMA_MISMATCH);
+
+    for var ci := 0 to schema.ColumnCount - 1 do
+      if (curSchema.NameAt(ci) <> schema.NameAt(ci)) or
+         (curSchema.ColumnTypeAt(ci) <> schema.ColumnTypeAt(ci)) or
+         (curSchema.IsCategoricalAt(ci) <> schema.IsCategoricalAt(ci)) then
+        ArgumentError(ER_CONCAT_SCHEMA_MISMATCH);
+  end;
+
+  var totalRows := 0;
+  for var di := 0 to dfs.Length - 1 do
+    totalRows += dfs[di].RowCount;
+
+  var res := new DataFrame;
+
+  for var ci := 0 to schema.ColumnCount - 1 do
+  begin
+    var name := schema.NameAt(ci);
+
+    case schema.ColumnTypeAt(ci) of
+      ctInt:
+      begin
+        var data := new integer[totalRows];
+        var valid := new boolean[totalRows];
+        var pos := 0;
+
+        for var di := 0 to dfs.Length - 1 do
+        begin
+          var col := IntColumn(dfs[di].columns[ci]);
+          for var r := 0 to col.Data.Length - 1 do
+          begin
+            data[pos] := col.Data[r];
+            valid[pos] := col.IsValid[r];
+            pos += 1;
+          end;
+        end;
+
+        res.AddIntColumn(name, data, valid);
+      end;
+
+      ctFloat:
+      begin
+        var data := new real[totalRows];
+        var valid := new boolean[totalRows];
+        var pos := 0;
+
+        for var di := 0 to dfs.Length - 1 do
+        begin
+          var col := FloatColumn(dfs[di].columns[ci]);
+          for var r := 0 to col.Data.Length - 1 do
+          begin
+            data[pos] := col.Data[r];
+            valid[pos] := col.IsValid[r];
+            pos += 1;
+          end;
+        end;
+
+        res.AddFloatColumn(name, data, valid);
+      end;
+
+      ctStr:
+      begin
+        var data := new string[totalRows];
+        var valid := new boolean[totalRows];
+        var pos := 0;
+
+        for var di := 0 to dfs.Length - 1 do
+        begin
+          var col := StrColumn(dfs[di].columns[ci]);
+          for var r := 0 to col.Data.Length - 1 do
+          begin
+            data[pos] := col.Data[r];
+            valid[pos] := col.IsValid[r];
+            pos += 1;
+          end;
+        end;
+
+        res.AddStrColumn(name, data, valid);
+      end;
+
+      ctBool:
+      begin
+        var data := new boolean[totalRows];
+        var valid := new boolean[totalRows];
+        var pos := 0;
+
+        for var di := 0 to dfs.Length - 1 do
+        begin
+          var col := BoolColumn(dfs[di].columns[ci]);
+          for var r := 0 to col.Data.Length - 1 do
+          begin
+            data[pos] := col.Data[r];
+            valid[pos] := col.IsValid[r];
+            pos += 1;
+          end;
+        end;
+
+        res.AddBoolColumn(name, data, valid);
+      end;
+    end;
+  end;
+
+  res.SetSchema(schema);
+  Result := res;
 end;
 
 procedure DataFrame.ToCsv(filename: string);

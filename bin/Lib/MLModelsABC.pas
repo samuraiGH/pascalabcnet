@@ -7116,6 +7116,9 @@ function GradientBoostingClassifier.PredictStage(X: Matrix; m: integer): array o
 begin
   var probs := PredictStageProba(X, m);
 
+  if fLabels = nil then
+    ArgumentError(ER_CLASSES_NOT_AVAILABLE);
+
   var n := probs.RowCount;
   SetLength(Result, n);
 
@@ -7131,7 +7134,7 @@ begin
         best := cls;
       end;
 
-    Result[i] := fClasses[best];
+    Result[i] := fLabels.ClassValueAt(best);
   end;
 end;
 

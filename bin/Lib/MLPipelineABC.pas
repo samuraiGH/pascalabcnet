@@ -879,21 +879,23 @@ end;
 
 function ClassificationDataPipeline.PredictLabels(df: DataFrame): array of string;
 begin
+  if df = nil then
+    ArgumentNullError(ER_ARG_NULL, 'df');
   if not fFitted then
     NotFittedError(ER_FIT_NOT_CALLED);
 
-  var encoded := Predict(df);
-  var classes := GetClassLabels;
-  Result := new string[encoded.Length];
-  
-  for var i := 0 to encoded.Length - 1 do
-  begin
-    var idx := encoded[i];
-    if (idx < 0) or (idx >= classes.Length) then
-      Error(ER_LABEL_INDEX_OUT_OF_RANGE, idx, classes.Length);
-    
-    Result[i] := classes[idx];
-  end;
+  if fModel = nil then
+    ArgumentError(ER_MODEL_NULL);
+
+  if not (fModel is IClassifier) then
+    Error(ER_PREDICT_NOT_SUPPORTED);
+
+  var current := Transform(df);
+
+  var X := current.ToMatrix(fFinalFeatures);
+  X := TransformMatrix(X);
+
+  Result := (fModel as IClassifier).PredictLabels(X);
 end;
 
 function ClassificationDataPipeline.PredictProba(df: DataFrame): Matrix;
