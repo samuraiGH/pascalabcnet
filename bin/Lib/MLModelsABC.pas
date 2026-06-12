@@ -372,7 +372,7 @@ type
       tol: real := 1e-6;
       checkConvergence: boolean := true;
       minImprovement: real := 1e-8;
-      useFastExp: boolean := True
+      useFastExp: boolean := False
     );
   
 /// Обучает модель логистической регрессии.
