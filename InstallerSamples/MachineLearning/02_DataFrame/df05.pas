@@ -9,5 +9,5 @@ begin
   Charlie,21,78
   ''');
   
-  df.Filter(row -> row.Int('age') >= 21).Print;
+  df.Filter(row -> row['age'] >= 21).Print;
 end.

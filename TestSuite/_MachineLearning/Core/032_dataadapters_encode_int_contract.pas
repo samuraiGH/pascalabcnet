@@ -4,7 +4,6 @@ uses TestHelpers in '..\TestHelpers.pas';
 begin
   var df := new DataFrame;
   df.AddIntColumn('Target', Arr(10, 20, 10, 30));
-  df := df.SetCategorical(['Target']);
 
   var classes: array of string;
   var y := df.EncodeLabels('Target', classes);

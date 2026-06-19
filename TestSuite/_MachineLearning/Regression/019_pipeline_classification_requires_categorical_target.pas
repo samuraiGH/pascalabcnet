@@ -12,7 +12,14 @@ begin
     new LogisticRegression
   );
 
-  CheckRaises(procedure -> begin pipe.Fit(df); end,
-    'Classification pipeline must require categorical target');
+  pipe.Fit(df);
+
+  var pred := pipe.Predict(df);
+  var labels := pipe.PredictLabels(df);
+  var classes := pipe.GetClassLabels;
+
+  Check(pred.Length = df.RowCount, 'Pipeline prediction length mismatch');
+  Check(labels.Length = df.RowCount, 'Pipeline label prediction length mismatch');
+  Check(classes.Length = 2, 'Pipeline class count mismatch');
 end.
 

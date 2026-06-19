@@ -106,8 +106,10 @@ type
   
   DataFrame = DataFrameABC.DataFrame;
   DataFrameCursor = DataFrameABCCore.DataFrameCursor;
+  DataValue = DataFrameABCCore.DataValue;
   ColumnType = DataFrameABCCore.ColumnType;
   Column = DataFrameABCCore.Column;
+  DatePartKind = DataFrameABC.DatePartKind;
   
   Statistics = DataFrameABC.Statistics;
   CsvLoader = DataFrameABC.CsvLoader;
@@ -163,6 +165,10 @@ type
   IPreprocessor = PreprocessorABC.IPreprocessor;
   OrdinalEncoder = PreprocessorABC.OrdinalEncoder;
   OneHotEncoder = PreprocessorABC.OneHotEncoder;
+  DateTimeComponentsEncoder = PreprocessorABC.DateTimeComponentsEncoder;
+  DateTimeUnit = PreprocessorABC.DateTimeUnit;
+  DateTimeOrdinalEncoder = PreprocessorABC.DateTimeOrdinalEncoder;
+  DateTimeCyclicEncoder = PreprocessorABC.DateTimeCyclicEncoder;
   ImputeStrategy = PreprocessorABC.ImputeStrategy;
   Imputer = PreprocessorABC.Imputer;
   
@@ -191,6 +197,21 @@ const
   jkLeft = JoinKind.jkLeft;
   jkRight = JoinKind.jkRight;
   jkFull = JoinKind.jkFull;
+  
+  dpYear = DatePartKind.dpYear;
+  dpMonth = DatePartKind.dpMonth;
+  dpDay = DatePartKind.dpDay;
+  dpHour = DatePartKind.dpHour;
+  dpMinute = DatePartKind.dpMinute;
+  dpSecond = DatePartKind.dpSecond;
+  dpDayOfWeek = DatePartKind.dpDayOfWeek;
+  dpTimeOfDay = DatePartKind.dpTimeOfDay;
+  dpDate = DatePartKind.dpDate;
+  
+  dtuDays = DateTimeUnit.dtuDays;
+  dtuHours = DateTimeUnit.dtuHours;
+  dtuMinutes = DateTimeUnit.dtuMinutes;
+  dtuSeconds = DateTimeUnit.dtuSeconds;
 
   /// Кодирует строковые метки классов в целочисленные индексы.
   /// Каждому уникальному значению присваивается номер 0,1,2,...

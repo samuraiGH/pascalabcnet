@@ -134,9 +134,6 @@ begin
   if not Self.HasColumn(target) then
     ArgumentError(ER_COLUMN_NOT_FOUND, target);
 
-  if not Self.IsCategorical(target) then
-    ArgumentError(ER_ENCODELABELS_NOT_CATEGORICAL, target);
-  
   var col := Self[target];
   for var i := 0 to Self.RowCount - 1 do
     if not col.IsValid[i] then
@@ -157,6 +154,13 @@ begin
     exit;
   end;
 
+  if Self.GetColumnType(target) = ColumnType.ctBool then
+  begin
+    var labels := Self.GetBoolColumn(target).ToArray.Select(x -> x.ToString).ToArray;
+    Result := EncodeLabels(labels);
+    exit;
+  end;
+
   ArgumentError(ER_ENCODELABELS_UNSUPPORTED_TYPE, target);
 end;
 
@@ -166,7 +170,7 @@ end;
 /// Каждому уникальному значению присваивается номер 0,1,2,...
 /// Порядок кодирования соответствует порядку первого появления значений в столбце.
 /// В параметр classes возвращается массив уникальных значений в порядке кодирования.
-/// Работает только для категориальных столбцов типов string и integer.
+/// Работает для столбцов типов string, integer и boolean.
 /// Для целочисленных категориальных столбцов значения преобразуются в строки.
 /// Используется при подготовке данных для задач классификации и визуализации.
 function EncodeLabels(Self: DataFrame; target: string; var classes: array of string): array of integer; extensionmethod;
@@ -180,9 +184,6 @@ begin
   if not Self.HasColumn(target) then
     ArgumentError(ER_COLUMN_NOT_FOUND, target);
 
-  if not Self.IsCategorical(target) then
-    ArgumentError(ER_ENCODELABELS_NOT_CATEGORICAL, target);
-  
   var col := Self[target];
   for var i := 0 to Self.RowCount - 1 do
     if not col.IsValid[i] then
@@ -203,6 +204,11 @@ begin
       
         // если API требует string classes:
         classes := intClasses.Select(x -> x.ToString).ToArray;
+      end;
+    ColumnType.ctBool:
+      begin
+        var labels := Self.GetBoolColumn(target).ToArray.Select(x -> x.ToString).ToArray;
+        Result := EncodeLabels(labels, classes);
       end;
     else
       ArgumentError(ER_ENCODELABELS_UNSUPPORTED_TYPE, target);
@@ -228,9 +234,6 @@ begin
   if not Self.HasColumn(target) then
     ArgumentError(ER_COLUMN_NOT_FOUND, target);
 
-  if not Self.IsCategorical(target) then
-    ArgumentError(ER_ENCODELABELS_NOT_CATEGORICAL, target);
-  
   var col := Self[target];
   for var i := 0 to Self.RowCount - 1 do
     if not col.IsValid[i] then
@@ -245,6 +248,16 @@ begin
     ColumnType.ctInt:
       begin
         var data := Self.GetIntColumn(target).ToArray;
+        var strData := new string[data.Length];
+  
+        for var i := 0 to data.Length - 1 do
+          strData[i] := data[i].ToString;
+  
+        Result := TransformLabels(strData, classes);
+      end;
+    ColumnType.ctBool:
+      begin
+        var data := Self.GetBoolColumn(target).ToArray;
         var strData := new string[data.Length];
   
         for var i := 0 to data.Length - 1 do

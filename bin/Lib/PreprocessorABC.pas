@@ -123,6 +123,92 @@ type
     function Clone: IPreprocessor;
   end;
 
+  DateTimeUnit = (dtuDays, dtuHours, dtuMinutes, dtuSeconds);
+
+/// Разворачивает DateTime-столбец в набор компонентных признаков.
+/// По умолчанию создаёт признаки year, month, day.
+/// Исходный DateTime-столбец заменяется новыми столбцами.
+  DateTimeComponentsEncoder = class(IPreprocessor, IColumnBoundStep, IColumnExpander)
+  private
+    col: string;
+    parts: array of DatePartKind;
+    expandedColumns: array of string;
+    fitted: boolean;
+    function DefaultParts: array of DatePartKind;
+    class function PartSuffix(part: DatePartKind): string;
+  public
+    /// Создаёт encoder со стандартным набором компонент: year, month, day.
+    constructor Create(column: string);
+    /// Создаёт encoder с явным списком компонент.
+    constructor Create(column: string; dateParts: array of DatePartKind);
+
+    function Fit(df: DataFrame): IPreprocessor;
+    function Transform(df: DataFrame): DataFrame;
+    function FitTransform(df: DataFrame): DataFrame;
+    function ToString: string; override;
+
+    property ColumnName: string read col;
+
+    function GetExpandedColumns(sourceColumn: string): array of string;
+    function Clone: IPreprocessor;
+  end;
+
+/// Кодирует DateTime-столбец в один вещественный столбец,
+/// содержащий расстояние от минимального значения столбца в выбранных единицах.
+/// На Fit запоминается fOrigin = Min(column), на Transform вычисляется
+/// (dt - fOrigin).TotalDays / TotalHours / TotalMinutes / TotalSeconds.
+/// Исходный столбец заменяется вещественным столбцом с новым именем.
+  DateTimeOrdinalEncoder = class(IPreprocessor, IColumnBoundStep)
+  private
+    col: string;
+    newCol: string;
+    unit_: DateTimeUnit;
+    fOrigin: System.DateTime;
+    fitted: boolean;
+    class function DefaultColumnName(column: string; unit_: DateTimeUnit): string;
+  public
+    constructor Create(column: string);
+    constructor Create(column, newColumn: string);
+    constructor Create(column, newColumn: string; unit_: DateTimeUnit);
+
+    function Fit(df: DataFrame): IPreprocessor;
+    function Transform(df: DataFrame): DataFrame;
+    function FitTransform(df: DataFrame): DataFrame;
+    function ToString: string; override;
+
+    property ColumnName: string read col;
+
+    function Clone: IPreprocessor;
+  end;
+
+/// Кодирует циклическую компоненту DateTime через пару sin/cos.
+/// Например, для dpHour создаёт created_at_cyc_hour_sin и created_at_cyc_hour_cos.
+/// Исходный DateTime-столбец заменяется двумя вещественными столбцами.
+  DateTimeCyclicEncoder = class(IPreprocessor, IColumnBoundStep, IColumnExpander)
+  private
+    col: string;
+    part: DatePartKind;
+    sinCol: string;
+    cosCol: string;
+    fitted: boolean;
+    class function PartSuffix(part: DatePartKind): string;
+    class function IsSupportedPart(part: DatePartKind): boolean;
+    class function PartPeriod(part: DatePartKind): integer;
+    class function PartValue(dt: System.DateTime; part: DatePartKind): real;
+  public
+    constructor Create(column: string; part: DatePartKind);
+
+    function Fit(df: DataFrame): IPreprocessor;
+    function Transform(df: DataFrame): DataFrame;
+    function FitTransform(df: DataFrame): DataFrame;
+    function ToString: string; override;
+
+    property ColumnName: string read col;
+
+    function GetExpandedColumns(sourceColumn: string): array of string;
+    function Clone: IPreprocessor;
+  end;
+
   ImputeStrategy = (isMean, isConstant, isMedian);
 
 /// Заполняет пропущенные значения (NA) в столбцах DataFrame
@@ -228,6 +314,45 @@ const
     'Конфликт имён колонок: {0}!!Column name collision: {0}';
   ER_ONEHOT_DUPLICATE_COLUMN =
     'Дублирующаяся сгенерированная колонка: {0}!!Duplicate generated column: {0}';  
+  ER_DTENC_NO_COLUMN =
+    'DateTimeComponentsEncoder: столбец не указан!!DateTimeComponentsEncoder: column not specified';
+  ER_DTENC_NOT_DATETIME =
+    'DateTimeComponentsEncoder: столбец "{0}" не является DateTime!!' +
+    'DateTimeComponentsEncoder: column "{0}" is not DateTime';
+  ER_DTENC_EMPTY_PARTS =
+    'DateTimeComponentsEncoder: список компонент пуст!!DateTimeComponentsEncoder: date parts list is empty';
+  ER_DTENC_DUPLICATE_PART =
+    'DateTimeComponentsEncoder: компонент даты повторяется: {0}!!DateTimeComponentsEncoder: duplicate date part: {0}';
+  ER_DTENC_NAME_EQUALS_SOURCE =
+    'DateTimeComponentsEncoder: сгенерированная колонка совпадает с исходной: {0}!!DateTimeComponentsEncoder: generated column equals source column: {0}';
+  ER_DTENC_COLUMN_COLLISION =
+    'DateTimeComponentsEncoder: конфликт имён колонок: {0}!!DateTimeComponentsEncoder: column name collision: {0}';
+  ER_DTENC_DUPLICATE_COLUMN =
+    'DateTimeComponentsEncoder: дублирующаяся сгенерированная колонка: {0}!!DateTimeComponentsEncoder: duplicate generated column: {0}';
+  ER_DTORD_NO_COLUMN =
+    'DateTimeOrdinalEncoder: столбец не указан!!DateTimeOrdinalEncoder: column not specified';
+  ER_DTORD_NO_NEW_COLUMN =
+    'DateTimeOrdinalEncoder: имя новой колонки не указано!!DateTimeOrdinalEncoder: new column name not specified';
+  ER_DTORD_NOT_DATETIME =
+    'DateTimeOrdinalEncoder: столбец "{0}" не является DateTime!!' +
+    'DateTimeOrdinalEncoder: column "{0}" is not DateTime';
+  ER_DTORD_NO_VALID_VALUES =
+    'DateTimeOrdinalEncoder: столбец "{0}" не содержит допустимых значений!!' +
+    'DateTimeOrdinalEncoder: column "{0}" has no valid values';
+  ER_DTORD_COLUMN_COLLISION =
+    'DateTimeOrdinalEncoder: конфликт имён колонок: {0}!!DateTimeOrdinalEncoder: column name collision: {0}';
+  ER_DTCYC_NO_COLUMN =
+    'DateTimeCyclicEncoder: столбец не указан!!DateTimeCyclicEncoder: column not specified';
+  ER_DTCYC_NOT_DATETIME =
+    'DateTimeCyclicEncoder: столбец "{0}" не является DateTime!!' +
+    'DateTimeCyclicEncoder: column "{0}" is not DateTime';
+  ER_DTCYC_UNSUPPORTED_PART =
+    'DateTimeCyclicEncoder: часть даты {0} не поддерживается для циклического кодирования!!' +
+    'DateTimeCyclicEncoder: date part {0} is not supported for cyclic encoding';
+  ER_DTCYC_COLUMN_COLLISION =
+    'DateTimeCyclicEncoder: конфликт имён колонок: {0}!!DateTimeCyclicEncoder: column name collision: {0}';
+  ER_DTCYC_DUPLICATE_COLUMN =
+    'DateTimeCyclicEncoder: дублирующаяся сгенерированная колонка: {0}!!DateTimeCyclicEncoder: duplicate generated column: {0}';
     
   
 //-----------------------------
@@ -530,6 +655,548 @@ end;
 function OneHotEncoder.Clone: IPreprocessor;
 begin
   Result := new OneHotEncoder(col);
+end;
+
+//-----------------------------
+//   DateTimeComponentsEncoder
+//-----------------------------
+
+function DateTimeComponentsEncoder.DefaultParts: array of DatePartKind;
+begin
+  Result := [DatePartKind.dpYear, DatePartKind.dpMonth, DatePartKind.dpDay];
+end;
+
+class function DateTimeComponentsEncoder.PartSuffix(part: DatePartKind): string;
+begin
+  case part of
+    dpYear: Result := 'year';
+    dpMonth: Result := 'month';
+    dpDay: Result := 'day';
+    dpHour: Result := 'hour';
+    dpMinute: Result := 'minute';
+    dpSecond: Result := 'second';
+    dpDayOfWeek: Result := 'dayofweek';
+    dpDate: Result := 'date';
+  end;
+end;
+
+constructor DateTimeComponentsEncoder.Create(column: string);
+begin
+  if column = '' then
+    ArgumentError(ER_DTENC_NO_COLUMN);
+
+  col := column;
+  parts := DefaultParts;
+  fitted := false;
+end;
+
+constructor DateTimeComponentsEncoder.Create(column: string; dateParts: array of DatePartKind);
+begin
+  if column = '' then
+    ArgumentError(ER_DTENC_NO_COLUMN);
+  if (dateParts = nil) or (dateParts.Length = 0) then
+    ArgumentError(ER_DTENC_EMPTY_PARTS);
+
+  col := column;
+  parts := Copy(dateParts);
+  fitted := false;
+end;
+
+function DateTimeComponentsEncoder.Fit(df: DataFrame): IPreprocessor;
+begin
+  if df = nil then
+    ArgumentNullError(ER_ARG_NULL, 'df');
+
+  var idx := df.Schema.IndexOf(col);
+  if idx < 0 then
+    Error(ER_COLUMN_NOT_FOUND, col);
+
+  if df.Schema.ColumnTypeAt(idx) <> ColumnType.ctDateTime then
+    Error(ER_DTENC_NOT_DATETIME, col);
+
+  var usedParts := new HashSet<DatePartKind>;
+  for var i := 0 to parts.Length - 1 do
+    if usedParts.Contains(parts[i]) then
+      Error(ER_DTENC_DUPLICATE_PART, parts[i])
+    else
+      usedParts.Add(parts[i]);
+
+  expandedColumns := new string[parts.Length];
+  var usedNames := new HashSet<string>;
+
+  for var i := 0 to parts.Length - 1 do
+  begin
+    var newName := col + '_' + PartSuffix(parts[i]);
+    expandedColumns[i] := newName;
+
+    if newName = col then
+      Error(ER_DTENC_NAME_EQUALS_SOURCE, newName);
+
+    if df.HasColumn(newName) then
+      Error(ER_DTENC_COLUMN_COLLISION, newName);
+
+    if usedNames.Contains(newName) then
+      Error(ER_DTENC_DUPLICATE_COLUMN, newName);
+
+    usedNames.Add(newName);
+  end;
+
+  fitted := true;
+  Result := Self;
+end;
+
+function DateTimeComponentsEncoder.Transform(df: DataFrame): DataFrame;
+begin
+  if not fitted then
+    NotFittedError(ER_FIT_NOT_CALLED);
+
+  var srcIdx := df.Schema.IndexOf(col);
+  if srcIdx < 0 then
+    ArgumentError(ER_COLUMN_NOT_FOUND, col);
+  if df.Schema.ColumnTypeAt(srcIdx) <> ColumnType.ctDateTime then
+    Error(ER_DTENC_NOT_DATETIME, col);
+
+  var rowCount := df.RowCount;
+  var srcCol := DateTimeColumn(df.GetColumn(srcIdx));
+  var srcData := srcCol.Data;
+  var srcValid := srcCol.IsValid;
+
+  var res := new DataFrame;
+  var names := new List<string>;
+  var types := new List<ColumnType>;
+  var cats := new List<boolean>;
+
+  AppendAllColumnsExcept(res, df, srcIdx, names, types, cats);
+
+  for var j := 0 to parts.Length - 1 do
+  begin
+    var part := parts[j];
+    var newName := expandedColumns[j];
+
+    if part = dpDate then
+    begin
+      var data := new System.DateTime[rowCount];
+      var valid := new boolean[rowCount];
+
+      for var row := 0 to rowCount - 1 do
+        if (srcValid <> nil) and not srcValid[row] then
+        begin
+          data[row] := default(System.DateTime);
+          valid[row] := False;
+        end
+        else
+        begin
+          data[row] := srcData[row].Date;
+          valid[row] := True;
+        end;
+
+      res.AddDateTimeColumn(newName, data, valid);
+      names.Add(newName);
+      types.Add(ColumnType.ctDateTime);
+      cats.Add(False);
+    end
+    else
+    begin
+      var data := new integer[rowCount];
+      var valid := new boolean[rowCount];
+
+      for var row := 0 to rowCount - 1 do
+        if (srcValid <> nil) and not srcValid[row] then
+        begin
+          data[row] := 0;
+          valid[row] := False;
+        end
+        else
+        begin
+          case part of
+            dpYear: data[row] := srcData[row].Year;
+            dpMonth: data[row] := srcData[row].Month;
+            dpDay: data[row] := srcData[row].Day;
+            dpHour: data[row] := srcData[row].Hour;
+            dpMinute: data[row] := srcData[row].Minute;
+            dpSecond: data[row] := srcData[row].Second;
+            dpDayOfWeek: data[row] := integer(srcData[row].DayOfWeek);
+          end;
+          valid[row] := True;
+        end;
+
+      res.AddIntColumn(newName, data, valid);
+      names.Add(newName);
+      types.Add(ColumnType.ctInt);
+      cats.Add(False);
+    end;
+  end;
+
+  res.SetSchema(new DataFrameSchema(
+    names.ToArray,
+    types.ToArray,
+    cats.ToArray
+  ));
+
+  Result := res;
+end;
+
+function DateTimeComponentsEncoder.FitTransform(df: DataFrame): DataFrame;
+begin
+  Fit(df);
+  Result := Transform(df);
+end;
+
+function DateTimeComponentsEncoder.ToString: string;
+begin
+  Result := 'DateTimeComponentsEncoder(column=' + col + ')';
+end;
+
+function DateTimeComponentsEncoder.GetExpandedColumns(sourceColumn: string): array of string;
+begin
+  if not fitted then
+    NotFittedError(ER_FIT_NOT_CALLED);
+
+  if sourceColumn <> col then
+    exit(nil);
+
+  Result := Copy(expandedColumns);
+end;
+
+function DateTimeComponentsEncoder.Clone: IPreprocessor;
+begin
+  Result := new DateTimeComponentsEncoder(col, parts);
+end;
+
+//-----------------------------
+//    DateTimeOrdinalEncoder
+//-----------------------------
+
+class function DateTimeOrdinalEncoder.DefaultColumnName(column: string; unit_: DateTimeUnit): string;
+begin
+  case unit_ of
+    dtuDays: Result := column + '_days';
+    dtuHours: Result := column + '_hours';
+    dtuMinutes: Result := column + '_minutes';
+    dtuSeconds: Result := column + '_seconds';
+  end;
+end;
+
+constructor DateTimeOrdinalEncoder.Create(column: string);
+begin
+  Create(column, DefaultColumnName(column, DateTimeUnit.dtuDays), DateTimeUnit.dtuDays);
+end;
+
+constructor DateTimeOrdinalEncoder.Create(column, newColumn: string);
+begin
+  Create(column, newColumn, DateTimeUnit.dtuDays);
+end;
+
+constructor DateTimeOrdinalEncoder.Create(column, newColumn: string; unit_: DateTimeUnit);
+begin
+  if column = '' then
+    ArgumentError(ER_DTORD_NO_COLUMN);
+  if newColumn = '' then
+    ArgumentError(ER_DTORD_NO_NEW_COLUMN);
+
+  col := column;
+  newCol := newColumn;
+  self.unit_ := unit_;
+  fitted := false;
+end;
+
+function DateTimeOrdinalEncoder.Fit(df: DataFrame): IPreprocessor;
+begin
+  if df = nil then
+    ArgumentNullError(ER_ARG_NULL, 'df');
+
+  var idx := df.Schema.IndexOf(col);
+  if idx < 0 then
+    Error(ER_COLUMN_NOT_FOUND, col);
+
+  if df.Schema.ColumnTypeAt(idx) <> ColumnType.ctDateTime then
+    Error(ER_DTORD_NOT_DATETIME, col);
+
+  if (newCol <> col) and df.HasColumn(newCol) then
+    Error(ER_DTORD_COLUMN_COLLISION, newCol);
+
+  var cur := df.GetCursor;
+  var hasValue := false;
+  var minValue := default(System.DateTime);
+
+  while cur.MoveNext do
+    if cur.IsValid(idx) then
+    begin
+      var dt := cur.DateTime(idx);
+      if not hasValue or (dt < minValue) then
+      begin
+        minValue := dt;
+        hasValue := true;
+      end;
+    end;
+
+  if not hasValue then
+    Error(ER_DTORD_NO_VALID_VALUES, col);
+
+  fOrigin := minValue;
+  fitted := true;
+  Result := Self;
+end;
+
+function DateTimeOrdinalEncoder.Transform(df: DataFrame): DataFrame;
+begin
+  if not fitted then
+    NotFittedError(ER_FIT_NOT_CALLED);
+
+  var idx := df.Schema.IndexOf(col);
+  if idx < 0 then
+    ArgumentError(ER_COLUMN_NOT_FOUND, col);
+  if df.Schema.ColumnTypeAt(idx) <> ColumnType.ctDateTime then
+    Error(ER_DTORD_NOT_DATETIME, col);
+
+  var srcCol := DateTimeColumn(df.GetColumn(idx));
+  var rowCount := df.RowCount;
+  var data := new real[rowCount];
+  var valid := new boolean[rowCount];
+
+  for var row := 0 to rowCount - 1 do
+    if (srcCol.IsValid <> nil) and not srcCol.IsValid[row] then
+    begin
+      data[row] := 0.0;
+      valid[row] := False;
+    end
+    else
+    begin
+      var delta := srcCol.Data[row] - fOrigin;
+      case unit_ of
+        dtuDays: data[row] := delta.TotalDays;
+        dtuHours: data[row] := delta.TotalHours;
+        dtuMinutes: data[row] := delta.TotalMinutes;
+        dtuSeconds: data[row] := delta.TotalSeconds;
+      end;
+      valid[row] := True;
+    end;
+
+  var res := new DataFrame;
+  var names := new List<string>;
+  var types := new List<ColumnType>;
+  var cats := new List<boolean>;
+
+  for var i := 0 to df.ColumnCount - 1 do
+    if i <> idx then
+    begin
+      res.AddColumnAlias(df.GetColumn(i));
+      names.Add(df.Schema.NameAt(i));
+      types.Add(df.Schema.ColumnTypeAt(i));
+      cats.Add(df.Schema.IsCategoricalAt(i));
+    end
+    else
+    begin
+      res.AddFloatColumn(newCol, data, valid);
+      names.Add(newCol);
+      types.Add(ColumnType.ctFloat);
+      cats.Add(False);
+    end;
+
+  res.SetSchema(new DataFrameSchema(
+    names.ToArray,
+    types.ToArray,
+    cats.ToArray
+  ));
+
+  Result := res;
+end;
+
+function DateTimeOrdinalEncoder.FitTransform(df: DataFrame): DataFrame;
+begin
+  Fit(df);
+  Result := Transform(df);
+end;
+
+function DateTimeOrdinalEncoder.ToString: string;
+begin
+  Result := 'DateTimeOrdinalEncoder(column=' + col + ', newColumn=' + newCol + ', unit=' + unit_.ToString + ')';
+end;
+
+function DateTimeOrdinalEncoder.Clone: IPreprocessor;
+begin
+  Result := new DateTimeOrdinalEncoder(col, newCol, unit_);
+end;
+
+//-----------------------------
+//     DateTimeCyclicEncoder
+//-----------------------------
+
+class function DateTimeCyclicEncoder.PartSuffix(part: DatePartKind): string;
+begin
+  case part of
+    dpMonth: Result := 'month';
+    dpDayOfWeek: Result := 'dayofweek';
+    dpHour: Result := 'hour';
+    dpMinute: Result := 'minute';
+    dpSecond: Result := 'second';
+    dpTimeOfDay: Result := 'timeofday';
+  end;
+end;
+
+class function DateTimeCyclicEncoder.IsSupportedPart(part: DatePartKind): boolean;
+begin
+  Result := part in [dpMonth, dpDayOfWeek, dpHour, dpMinute, dpSecond, dpTimeOfDay];
+end;
+
+class function DateTimeCyclicEncoder.PartPeriod(part: DatePartKind): integer;
+begin
+  case part of
+    dpMonth: Result := 12;
+    dpDayOfWeek: Result := 7;
+    dpHour: Result := 24;
+    dpMinute: Result := 60;
+    dpSecond: Result := 60;
+    dpTimeOfDay: Result := 86400;
+    else
+      Error(ER_DTCYC_UNSUPPORTED_PART, part);
+  end;
+end;
+
+class function DateTimeCyclicEncoder.PartValue(dt: System.DateTime; part: DatePartKind): real;
+begin
+  case part of
+    dpMonth: Result := dt.Month - 1;
+    dpDayOfWeek: Result := integer(dt.DayOfWeek);
+    dpHour: Result := dt.Hour;
+    dpMinute: Result := dt.Minute;
+    dpSecond: Result := dt.Second;
+    dpTimeOfDay:
+      Result := dt.Hour * 3600.0 + dt.Minute * 60.0 + dt.Second + dt.Millisecond / 1000.0;
+    else
+      Error(ER_DTCYC_UNSUPPORTED_PART, part);
+  end;
+end;
+
+constructor DateTimeCyclicEncoder.Create(column: string; part: DatePartKind);
+begin
+  if column = '' then
+    ArgumentError(ER_DTCYC_NO_COLUMN);
+  if not IsSupportedPart(part) then
+    Error(ER_DTCYC_UNSUPPORTED_PART, part);
+
+  col := column;
+  self.part := part;
+  var suffix := PartSuffix(part);
+  sinCol := col + '_cyc_' + suffix + '_sin';
+  cosCol := col + '_cyc_' + suffix + '_cos';
+  fitted := false;
+end;
+
+function DateTimeCyclicEncoder.Fit(df: DataFrame): IPreprocessor;
+begin
+  if df = nil then
+    ArgumentNullError(ER_ARG_NULL, 'df');
+
+  var idx := df.Schema.IndexOf(col);
+  if idx < 0 then
+    Error(ER_COLUMN_NOT_FOUND, col);
+
+  if df.Schema.ColumnTypeAt(idx) <> ColumnType.ctDateTime then
+    Error(ER_DTCYC_NOT_DATETIME, col);
+
+  if df.HasColumn(sinCol) then
+    Error(ER_DTCYC_COLUMN_COLLISION, sinCol);
+  if df.HasColumn(cosCol) then
+    Error(ER_DTCYC_COLUMN_COLLISION, cosCol);
+  if sinCol = cosCol then
+    Error(ER_DTCYC_DUPLICATE_COLUMN, sinCol);
+
+  fitted := true;
+  Result := Self;
+end;
+
+function DateTimeCyclicEncoder.Transform(df: DataFrame): DataFrame;
+begin
+  if not fitted then
+    NotFittedError(ER_FIT_NOT_CALLED);
+
+  var srcIdx := df.Schema.IndexOf(col);
+  if srcIdx < 0 then
+    ArgumentError(ER_COLUMN_NOT_FOUND, col);
+  if df.Schema.ColumnTypeAt(srcIdx) <> ColumnType.ctDateTime then
+    Error(ER_DTCYC_NOT_DATETIME, col);
+
+  var rowCount := df.RowCount;
+  var srcCol := DateTimeColumn(df.GetColumn(srcIdx));
+  var srcData := srcCol.Data;
+  var srcValid := srcCol.IsValid;
+
+  var period := PartPeriod(part);
+  var sinData := new real[rowCount];
+  var cosData := new real[rowCount];
+  var sinValid := new boolean[rowCount];
+  var cosValid := new boolean[rowCount];
+
+  for var row := 0 to rowCount - 1 do
+    if (srcValid <> nil) and not srcValid[row] then
+    begin
+      sinData[row] := 0.0;
+      cosData[row] := 0.0;
+      sinValid[row] := False;
+      cosValid[row] := False;
+    end
+    else
+    begin
+      var value := PartValue(srcData[row], part);
+      var angle := 2 * PI * value / period;
+      sinData[row] := Sin(angle);
+      cosData[row] := Cos(angle);
+      sinValid[row] := True;
+      cosValid[row] := True;
+    end;
+
+  var res := new DataFrame;
+  var names := new List<string>;
+  var types := new List<ColumnType>;
+  var cats := new List<boolean>;
+
+  AppendAllColumnsExcept(res, df, srcIdx, names, types, cats);
+
+  res.AddFloatColumn(sinCol, sinData, sinValid);
+  names.Add(sinCol);
+  types.Add(ColumnType.ctFloat);
+  cats.Add(False);
+
+  res.AddFloatColumn(cosCol, cosData, cosValid);
+  names.Add(cosCol);
+  types.Add(ColumnType.ctFloat);
+  cats.Add(False);
+
+  res.SetSchema(new DataFrameSchema(
+    names.ToArray,
+    types.ToArray,
+    cats.ToArray
+  ));
+
+  Result := res;
+end;
+
+function DateTimeCyclicEncoder.FitTransform(df: DataFrame): DataFrame;
+begin
+  Fit(df);
+  Result := Transform(df);
+end;
+
+function DateTimeCyclicEncoder.ToString: string;
+begin
+  Result := 'DateTimeCyclicEncoder(column=' + col + ', part=' + part.ToString + ')';
+end;
+
+function DateTimeCyclicEncoder.GetExpandedColumns(sourceColumn: string): array of string;
+begin
+  if not fitted then
+    NotFittedError(ER_FIT_NOT_CALLED);
+
+  if sourceColumn <> col then
+    exit(nil);
+
+  Result := [sinCol, cosCol];
+end;
+
+function DateTimeCyclicEncoder.Clone: IPreprocessor;
+begin
+  Result := new DateTimeCyclicEncoder(col, part);
 end;
 
 //-----------------------------

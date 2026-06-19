@@ -309,8 +309,8 @@ const
   ER_ENCODELABELS_NOT_CATEGORICAL =
     'Целевой столбец должен быть категориальным для задач классификации!!Target column must be categorical for classification tasks';
   ER_CLASSIFICATION_TARGET_MUST_BE_CATEGORICAL_STR_OR_INT =
-    'Целевой столбец "{0}" должен быть категориальным строковым или целочисленным для задач классификации!!' +
-    'Target column "{0}" must be a categorical string or integer column for classification tasks';
+    'Целевой столбец "{0}" должен быть строковым, целочисленным или логическим для задач классификации!!' +
+    'Target column "{0}" must be a string, integer, or boolean column for classification tasks';
   ER_REGRESSION_TARGET_MUST_BE_NUMERIC =
     'Целевой столбец "{0}" должен быть числовым для задач регрессии!!Target column "{0}" must be numeric for regression tasks';
   ER_PREPROCESSOR_ROWCOUNT_CHANGED =
@@ -990,10 +990,8 @@ begin
   case fTask of
     tkClassification:
       begin
-        if not df.IsCategorical(fTarget) then
-          ArgumentError(ER_ENCODELABELS_NOT_CATEGORICAL, fTarget);
         var ct := df.GetColumnType(fTarget);
-        if not (ct in [ColumnType.ctStr, ColumnType.ctInt]) then
+        if not (ct in [ColumnType.ctStr, ColumnType.ctInt, ColumnType.ctBool]) then
           ArgumentError(ER_CLASSIFICATION_TARGET_MUST_BE_CATEGORICAL_STR_OR_INT, fTarget);
       end;
 
