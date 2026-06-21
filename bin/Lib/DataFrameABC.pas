@@ -301,15 +301,11 @@ type
     function MeanVariance(selector: DataFrameCursor -> DataValue): (real, real);
     
     /// Возвращает статистику столбца по индексу
-    function Describe(colIndex: integer): DescribeStats; 
+    function Stats(colIndex: integer): DescribeStats; 
     /// Возвращает статистику столбца по имени
-    function Describe(colName: string): DescribeStats; 
-    /// Возвращает статистику по нескольким столбцам по именам
-    function Describe(colNames: array of string): Dictionary<string, DescribeStats>; 
-    /// Возвращает статистику по нескольким столбцам по индексам
-    function Describe(colIndices: array of integer): Dictionary<integer, DescribeStats>; 
-    /// Возвращает статистику по всем числовым столбцам
-    function DescribeAll: Dictionary<string, DescribeStats>;
+    function Stats(colName: string): DescribeStats;
+    /// Возвращает таблицу описательной статистики по всем числовым столбцам
+    function Describe: DataFrame;
 
     /// Возвращает уникальные непустые значения столбца
     /// в порядке первого появления
@@ -320,6 +316,8 @@ type
     /// Результат сортируется по убыванию Count,
     /// при равенстве частот сохраняется порядок первого появления
     function ValueCounts(colName: string): DataFrame;
+    /// Возвращает таблицу частот значений столбца с явным именем столбца счётчиков
+    function ValueCounts(colName: string; countColName: string): DataFrame;
     /// Возвращает число пропусков в столбце
     function MissingCount(colName: string): integer;
     /// Возвращает таблицу с числом пропусков по всем столбцам
@@ -462,20 +460,40 @@ type
     procedure PrintInfo;
 
     /// Загружает DataFrame из CSV файла
-    static function FromCsv(filename: string): DataFrame;
+    static function FromCsv(
+      filename: string;
+      delimiter: char := ',';
+      hasHeader: boolean := true;
+      columnTypes: Dictionary<string, ColumnType> := nil;
+      categoricalColumns: array of string := nil
+    ): DataFrame;
     /// Загружает DataFrame из многострочной строки в формате CSV
-    static function FromCsvText(text: string): DataFrame;
+    static function FromCsvText(
+      text: string;
+      delimiter: char := ',';
+      hasHeader: boolean := true;
+      columnTypes: Dictionary<string, ColumnType> := nil;
+      categoricalColumns: array of string := nil
+    ): DataFrame;
     /// Загружает DataFrame из листа ODS-файла
-    static function FromODS(filename: string; sheet: string := ''): DataFrame;
+    static function FromODS(
+      filename: string;
+      sheet: string := '';
+      hasHeader: boolean := true;
+      columnTypes: Dictionary<string, ColumnType> := nil;
+      categoricalColumns: array of string := nil
+    ): DataFrame;
     /// Сохраняет DataFrame в csv-файл
     procedure ToCsv(filename: string);
   private
     /// Проверяет валидность индекса столбца
     procedure CheckColumnIndex(colIndex: integer);
+    function DescribeByIndices(colIndices: array of integer): Dictionary<integer, DescribeStats>;
+    function DescribeAll: Dictionary<string, DescribeStats>;
     /// Добавляет строку из курсора
     //procedure AppendRowFromCursor(src: DataFrame; cur: DataFrameCursor);
   end;
-  
+
   /// Тип операции группировки
   AggregationKind = (akCount, akSum, akMean, akStd, akMin, akMax);
   
@@ -492,7 +510,6 @@ type
     function Min(colName: string): real;
     function Max(colName: string): real;
   end;
-  
   /// Интерфейс для группировки данных
   IGroupByContext = interface
     /// Возвращает DataFrame с количеством строк в каждой группе
@@ -568,7 +585,7 @@ type
     /// Эквивалентна Quantile(..., 0.5)
     static function Median(df: DataFrame; colName: string): real;
   end;  
- 
+
 type
   /// Статический класс для загрузки данных из CSV файлов
   CsvLoader = static class
@@ -581,7 +598,7 @@ type
       missingValues: array of string := nil; // Значения, считающиеся пропущенными
       trimWhitespace: boolean := true;
       strict: boolean := False;              // Строгий режим (проверка формата) - бросать ли исключения 
-      schema: Dictionary<string, ColumnType> := nil;
+      columnTypes: Dictionary<string, ColumnType> := nil;
       sampleSize: integer := 1000;
       ignoreColumns: array of string := nil;
       inferTypes: boolean := True;
@@ -602,7 +619,7 @@ type
       missingValues: array of string := nil;
       trimWhitespace: boolean := true;
       strict: boolean := False;
-      schema: Dictionary<string, ColumnType> := nil;
+      columnTypes: Dictionary<string, ColumnType> := nil;
       sampleSize: integer := 1000;
       ignoreColumns: array of string := nil;
       inferTypes: boolean := True;
@@ -763,6 +780,8 @@ const
     'Нижняя граница Clip больше верхней!!Clip lower bound is greater than upper bound';
   ER_CLIP_INT_BOUNDS_NON_INTEGER =
     'Для целочисленного столбца границы Clip должны быть целыми!!Clip bounds for Int column must be integers';
+  ER_VALUECOUNTS_COUNTCOL_EMPTY =
+    'Имя столбца счётчиков пусто!!ValueCounts count column name is empty';
 
 function FormatDateTimeForPrint(dt: System.DateTime; fmt: string): string; forward;
 function CollectSelectorValues(df: DataFrame; selector: DataFrameCursor -> DataValue): List<real>; forward;
@@ -3127,7 +3146,7 @@ begin
   Result := (mean, acc / (cnt - 1));
 end;
   
-function DataFrame.Describe(colIndex: integer): DescribeStats;
+function DataFrame.Stats(colIndex: integer): DescribeStats;
 begin
   CheckColumnIndex(colIndex);
 
@@ -3194,30 +3213,17 @@ begin
   Result.Max := mx;
 end;
 
-function DataFrame.Describe(colName: string): DescribeStats;
+function DataFrame.Stats(colName: string): DescribeStats;
 begin
-  Result := Describe(ColumnIndex(colName));
+  Result := Stats(ColumnIndex(colName));
 end;
 
-function DataFrame.Describe(colNames: array of string): Dictionary<string, DescribeStats>;
-begin
-  var res := new Dictionary<string, DescribeStats>;
-
-  foreach var name in colNames do
-  begin
-    var idx := ColumnIndex(name);
-    res[name] := Describe(idx);
-  end;
-
-  Result := res;
-end;
-
-function DataFrame.Describe(colIndices: array of integer): Dictionary<integer, DescribeStats>;
+function DataFrame.DescribeByIndices(colIndices: array of integer): Dictionary<integer, DescribeStats>;
 begin
   var res := new Dictionary<integer, DescribeStats>;
 
   foreach var i in colIndices do
-    res[i] := Describe(i);
+    res[i] := Stats(i);
 
   Result := res;
 end;
@@ -3229,10 +3235,55 @@ begin
   for var i := 0 to ColumnCount - 1 do
     case columns[i].Info.ColType of
       ctInt, ctFloat:
-        res[columns[i].Info.Name] := Describe(i);
+        res[columns[i].Info.Name] := Stats(i);
     end;
 
   Result := res;
+end;
+
+function DataFrame.Describe: DataFrame;
+begin
+  var stats := DescribeAll;
+  var names := new List<string>;
+  var counts := new List<integer>;
+  var means := new List<real>;
+  var stds := new List<real>;
+  var mins := new List<real>;
+  var maxs := new List<real>;
+  var allInt := true;
+
+  for var i := 0 to ColumnCount - 1 do
+    case columns[i].Info.ColType of
+      ctInt, ctFloat:
+      begin
+        var name := columns[i].Info.Name;
+        var st := stats[name];
+        names.Add(name);
+        counts.Add(st.Count);
+        means.Add(st.Mean);
+        stds.Add(st.Std);
+        mins.Add(st.Min);
+        maxs.Add(st.Max);
+        if columns[i].Info.ColType <> ctInt then
+          allInt := false;
+      end;
+    end;
+
+  Result := new DataFrame;
+  Result.AddStrColumn('Column', names.ToArray, nil);
+  Result.AddIntColumn('Count', counts.ToArray, nil);
+  Result.AddFloatColumn('Mean', means.ToArray, nil);
+  Result.AddFloatColumn('Std', stds.ToArray, nil);
+  if allInt then
+  begin
+    Result.AddIntColumn('Min', mins.Select(x -> Round(x)).ToArray, nil);
+    Result.AddIntColumn('Max', maxs.Select(x -> Round(x)).ToArray, nil);
+  end
+  else
+  begin
+    Result.AddFloatColumn('Min', mins.ToArray, nil);
+    Result.AddFloatColumn('Max', maxs.ToArray, nil);
+  end;
 end;
 
 function DataFrame.Unique(colName: string): array of DataValue;
@@ -3301,12 +3352,29 @@ end;
 
 function DataFrame.ValueCounts(colName: string): DataFrame;
 begin
+  Result := ValueCounts(colName, 'Count');
+end;
+
+function ValueCounts(Self: Column): DataFrame; extensionmethod;
+begin
+  var df := new DataFrame;
+  df.AddColumnAlias(Self);
+  Result := df.ValueCounts(Self.Info.Name);
+end;
+
+function DataFrame.ValueCounts(colName: string; countColName: string): DataFrame;
+begin
   var ci := ColumnIndex(colName);
   var col := GetColumn(ci);
   var counts := new List<integer>;
   var order := new List<integer>;
   var res := new DataFrame;
-  var countColName := if colName = 'Count' then 'Frequency' else 'Count';
+  if countColName = nil then
+    ArgumentNullError('countColName');
+  if countColName = '' then
+    ArgumentError(ER_VALUECOUNTS_COUNTCOL_EMPTY);
+  if countColName = colName then
+    ArgumentError(ER_COLUMN_ALREADY_EXISTS, countColName);
 
   case col.Info.ColType of
     ctInt:
@@ -5317,30 +5385,75 @@ begin
   Result := res;
 end;
 
-static function DataFrame.FromCsv(filename: string): DataFrame;
+static function DataFrame.FromCsv(
+  filename: string;
+  delimiter: char;
+  hasHeader: boolean;
+  columnTypes: Dictionary<string, ColumnType>;
+  categoricalColumns: array of string
+): DataFrame;
 begin
-  Result := CsvLoader.Load(filename);
-end;
-
-static function DataFrame.FromCsvText(text: string): DataFrame;
-begin
-  Result := CsvLoader.LoadFromLines(text.ToLines);
-end;
-
-static function DataFrame.FromODS(filename: string; sheet: string): DataFrame;
-begin
-  Result := LoadFromRows(
-    ODSReader.ReadSheet(filename, sheet),
-    true,
+  Result := CsvLoader.Load(
+    filename,
+    delimiter,
+    hasHeader,
+    nil,
     nil,
     true,
     false,
-    nil,
+    columnTypes,
     1000,
     nil,
     true,
     nil,
+    categoricalColumns
+  );
+end;
+
+static function DataFrame.FromCsvText(
+  text: string;
+  delimiter: char;
+  hasHeader: boolean;
+  columnTypes: Dictionary<string, ColumnType>;
+  categoricalColumns: array of string
+): DataFrame;
+begin
+  Result := CsvLoader.LoadFromLines(
+    text.ToLines,
+    delimiter,
+    hasHeader,
     nil,
+    true,
+    false,
+    columnTypes,
+    1000,
+    nil,
+    true,
+    nil,
+    categoricalColumns
+  );
+end;
+
+static function DataFrame.FromODS(
+  filename: string;
+  sheet: string;
+  hasHeader: boolean;
+  columnTypes: Dictionary<string, ColumnType>;
+  categoricalColumns: array of string
+): DataFrame;
+begin
+  Result := LoadFromRows(
+    ODSReader.ReadSheet(filename, sheet),
+    hasHeader,
+    nil,
+    true,
+    false,
+    columnTypes,
+    1000,
+    nil,
+    true,
+    nil,
+    categoricalColumns,
     false,
     100,
     0.2,
@@ -6429,7 +6542,17 @@ begin
           res.AddIntColumn(colNameAgg, counts[c], nil);
   
         akSum:
-          res.AddFloatColumn(colNameAgg, sums[c], nil);
+        begin
+          if colsIsInt[c] then
+          begin
+            var arr := new integer[n];
+            for var g := 0 to n - 1 do
+              arr[g] := Round(sums[c][g]);
+            res.AddIntColumn(colNameAgg, arr, nil);
+          end
+          else
+            res.AddFloatColumn(colNameAgg, sums[c], nil);
+        end;
   
         akMean:
         begin
@@ -6451,16 +6574,38 @@ begin
         end;
   
         akMin:
-          res.AddFloatColumn(colNameAgg, mins[c], nil);
+        begin
+          if colsIsInt[c] then
+          begin
+            var arr := new integer[n];
+            for var g := 0 to n - 1 do
+              arr[g] := Round(mins[c][g]);
+            res.AddIntColumn(colNameAgg, arr, nil);
+          end
+          else
+            res.AddFloatColumn(colNameAgg, mins[c], nil);
+        end;
   
         akMax:
-          res.AddFloatColumn(colNameAgg, maxs[c], nil);
+        begin
+          if colsIsInt[c] then
+          begin
+            var arr := new integer[n];
+            for var g := 0 to n - 1 do
+              arr[g] := Round(maxs[c][g]);
+            res.AddIntColumn(colNameAgg, arr, nil);
+          end
+          else
+            res.AddFloatColumn(colNameAgg, maxs[c], nil);
+        end;
       end;
   
       // метаданные
       names.Add(colNameAgg);
   
       if kind = akCount then
+        types.Add(ctInt)
+      else if (kind in [akSum, akMin, akMax]) and colsIsInt[c] then
         types.Add(ctInt)
       else
         types.Add(ctFloat);
@@ -7638,6 +7783,10 @@ begin
       if hasHeader then
       begin
         headers := Copy(current);
+        if trimWhitespace then
+          for var j := 0 to headers.Length - 1 do
+            if headers[j] <> nil then
+              headers[j] := headers[j].Trim;
         originalColCount := headers.Length;
       end
       else
@@ -8015,7 +8164,7 @@ static function CSVLoader.LoadFromLines(
   missingValues: array of string; 
   trimWhitespace: boolean; 
   strict: boolean; 
-  schema: Dictionary<string, ColumnType>; 
+  columnTypes: Dictionary<string, ColumnType>; 
   sampleSize: integer;
   ignoreColumns: array of string;
   inferTypes: boolean;
@@ -8109,6 +8258,9 @@ begin
         if (s.Length >= 2) and (s[1] = '"') and (s[s.Length] = '"') then
           s := s.Substring(1, s.Length - 2);
       
+        if trimWhitespace then
+          s := s.Trim;
+      
         parts[j] := s;
       end;
   
@@ -8175,14 +8327,14 @@ begin
       begin
         var name := headers[j];
         
-        if (schema <> nil) and schema.ContainsKey(name) then
+        if (columnTypes <> nil) and columnTypes.ContainsKey(name) then
         begin
           canBool[j] := false;
           canInt[j] := false;
           canFloat[j] := false;
           canDateTime[j] := false;
           
-          case schema[name] of
+          case columnTypes[name] of
             ctBool:  canBool[j] := true;
             ctInt:   canInt[j] := true;
             ctFloat: canFloat[j] := true;
@@ -8231,6 +8383,8 @@ begin
       if (s.Length >= 2) and (s[1] = '"') and (s[s.Length] = '"') then
         s := s.Substring(1, s.Length - 2);
     
+      if trimWhitespace then
+        s := s.Trim;
       parts[j] := s;
     end;
   
@@ -8266,7 +8420,7 @@ begin
       
       if not inferTypes then continue;
       
-      if (schema <> nil) and schema.ContainsKey(name) then
+      if (columnTypes <> nil) and columnTypes.ContainsKey(name) then
         continue;
       
       if (forceStrSet <> nil) and (name in forceStrSet) then
@@ -8303,7 +8457,7 @@ begin
     begin
       var name := headers[j];
       
-      if (schema <> nil) and schema.ContainsKey(name) then continue;
+      if (columnTypes <> nil) and columnTypes.ContainsKey(name) then continue;
       if (forceStrSet <> nil) and (name in forceStrSet) then continue;
       if (catSet <> nil) and (name in catSet) then continue;
       
@@ -8601,7 +8755,7 @@ static function CSVLoader.Load(filename: string;
   missingValues: array of string;
   trimWhitespace: boolean;
   strict: boolean;
-  schema: Dictionary<string, ColumnType>;
+  columnTypes: Dictionary<string, ColumnType>;
   sampleSize: integer;
   ignoreColumns: array of string;
   inferTypes: boolean;
@@ -8626,7 +8780,7 @@ begin
     missingValues,
     trimWhitespace,
     strict,
-    schema,
+    columnTypes,
     sampleSize,
     ignoreColumns,
     inferTypes,
@@ -8706,3 +8860,10 @@ begin
 end;
 
 end.
+
+
+
+
+
+
+

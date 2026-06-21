@@ -185,6 +185,12 @@ type
   AggregationKind = DataFrameABC.AggregationKind;
   
 const
+  ctInt = ColumnType.ctInt;
+  ctFloat = ColumnType.ctFloat;
+  ctStr = ColumnType.ctStr;
+  ctBool = ColumnType.ctBool;
+  ctDateTime = ColumnType.ctDateTime;
+
   akMean = AggregationKind.akMean;
   akMin = AggregationKind.akMin;
   akMax = AggregationKind.akMax;
@@ -226,3 +232,4 @@ implementation
 function EncodeLabels(labels: array of string): array of integer := MLUtilsABC.EncodeLabels(labels);
   
 end.
+

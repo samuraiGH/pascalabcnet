@@ -1,4 +1,4 @@
-uses MLABC;
+﻿uses MLABC;
 
 begin
   var text := '''
@@ -9,10 +9,7 @@ id,created_at,name
 4,16.01.2024 12:30:00,Diana
 ''';
 
-  var df := CsvLoader.LoadFromLines(
-    text.ToLines,
-    inferTypes := True
-  );
+  var df := DataFrame.FromCsvText(text);
 
   var grouped := df.GroupBy('created_at').Count;
 

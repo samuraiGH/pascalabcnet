@@ -1,4 +1,4 @@
-uses MLABC;
+﻿uses MLABC;
 
 begin
   var text := '''
@@ -8,10 +8,7 @@ id,created_at,name
 3,17.01.2024 09:15:00,Charlie
 ''';
 
-  var df := CsvLoader.LoadFromLines(
-    text.ToLines,
-    inferTypes := True
-  );
+  var df := DataFrame.FromCsvText(text);
 
   var sorted := df.SortBy('created_at');
 

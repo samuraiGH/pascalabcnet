@@ -8,10 +8,7 @@ id,created_at,name
 3,17.01.2024 09:15:00,Charlie
 ''';
 
-  var df := CsvLoader.LoadFromLines(
-    text.ToLines,
-    inferTypes := True
-  );
+  var df := DataFrame.FromCsvText(text);
 
   var filtered := df.Filter(cur -> cur.DateTime('created_at') >= DateTime.Create(2024, 1, 16));
 

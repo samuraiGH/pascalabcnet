@@ -206,7 +206,15 @@ type
     static function operator +(a, b: DataValue): DataValue;
     static function operator -(a, b: DataValue): DataValue;
     static function operator *(a, b: DataValue): DataValue;
+    static function operator *(a: DataValue; b: integer): real;
+    static function operator *(a: DataValue; b: real): real;
+    static function operator *(a: integer; b: DataValue): real;
+    static function operator *(a: real; b: DataValue): real;
     static function operator /(a, b: DataValue): DataValue;
+    static function operator /(a: DataValue; b: integer): real;
+    static function operator /(a: DataValue; b: real): real;
+    static function operator /(a: integer; b: DataValue): real;
+    static function operator /(a: real; b: DataValue): real;
   end;
   
   DataFrameCursor = class;
@@ -223,6 +231,26 @@ type
     Info: ColumnInfo;
   public
     IsValid: array of boolean;  // Флаги валидности (может быть nil)
+    /// Возвращает число валидных (non-NA) значений в столбце
+    function Count: integer; virtual;
+    /// Возвращает число пропусков в столбце
+    function MissingCount: integer; virtual;
+    /// Возвращает минимальное числовое значение столбца
+    function Min: real; virtual;
+    /// Возвращает максимальное числовое значение столбца
+    function Max: real; virtual;
+    /// Возвращает среднее числовое значение столбца
+    function Mean: real; virtual;
+    /// Возвращает медиану числовых значений столбца
+    function Median: real; virtual;
+    /// Возвращает выборочную дисперсию числовых значений столбца
+    function Variance: real; virtual;
+    /// Возвращает выборочное стандартное отклонение числовых значений столбца
+    function Std: real; virtual;
+    /// Возвращает уникальные непустые значения столбца в порядке первого появления
+    function Unique: array of DataValue; virtual;
+    /// Возвращает число различных непустых значений столбца
+    function NUnique: integer; virtual;
     /// Пытается извлечь i-тое данное из столбца как числовое если это возможно
     function TryGetNumericValue(i: integer; var value: real): boolean; virtual; abstract;
     /// Возвращает количество строк в столбце
@@ -399,6 +427,7 @@ type
   end;
 
 function MergedRightColumnName(leftSchema, rightSchema: DataFrameSchema; rightIndex: integer): string;
+function ColumnNumericValues(col: Column): List<real>;
   
 implementation
 
@@ -464,6 +493,10 @@ const
     'Нельзя выполнять арифметические операции для типов {0} и {1}!!Cannot apply arithmetic to types {0} and {1}';
   ER_DATAVALUE_DIVISION_BY_ZERO =
     'Деление на ноль!!Division by zero';
+  ER_COLUMN_NUMERIC_REQUIRED =
+    'Столбец "{0}" должен быть числовым!!Column "{0}" must be numeric';
+  ER_COLUMN_NO_VALID_VALUES =
+    'Столбец "{0}" не содержит валидных значений!!Column "{0}" has no valid values';
     
 //-----------------------------
 //      Сервисные функции
@@ -497,6 +530,28 @@ function NotDateTime(pos: integer): System.DateTime;
 begin
   Result := default(System.DateTime);
   Error(ER_COLUMN_NOT_DATETIME);
+end;
+
+procedure EnsureNumericColumn(col: Column);
+begin
+  if (col = nil) or (col.Info = nil) then
+    ArgumentNullError('col');
+
+  if not (col.Info.ColType in [ctInt, ctFloat]) then
+    Error(ER_COLUMN_NUMERIC_REQUIRED, col.Info.Name);
+end;
+
+function ColumnNumericValues(col: Column): List<real>;
+begin
+  EnsureNumericColumn(col);
+
+  Result := new List<real>;
+  for var i := 0 to col.RowCount - 1 do
+  begin
+    var value: real;
+    if col.TryGetNumericValue(i, value) then
+      Result.Add(value);
+  end;
 end;
 
 function ColumnTypeName(t: ColumnType): string;
@@ -834,12 +889,92 @@ begin
   Result := MakeNumeric(a.Name, a.Float * b.Float, t = ctInt);
 end;
 
+static function DataValue.operator *(a: DataValue; b: integer): real;
+begin
+  if System.Object.ReferenceEquals(a, nil) then
+    ArgumentNullError('a');
+  if not a.fIsValid then
+    Error(ER_VALUE_IS_NA, a.fName);
+  Result := a.Float * b;
+end;
+
+static function DataValue.operator *(a: DataValue; b: real): real;
+begin
+  if System.Object.ReferenceEquals(a, nil) then
+    ArgumentNullError('a');
+  if not a.fIsValid then
+    Error(ER_VALUE_IS_NA, a.fName);
+  Result := a.Float * b;
+end;
+
+static function DataValue.operator *(a: integer; b: DataValue): real;
+begin
+  if System.Object.ReferenceEquals(b, nil) then
+    ArgumentNullError('b');
+  if not b.fIsValid then
+    Error(ER_VALUE_IS_NA, b.fName);
+  Result := a * b.Float;
+end;
+
+static function DataValue.operator *(a: real; b: DataValue): real;
+begin
+  if System.Object.ReferenceEquals(b, nil) then
+    ArgumentNullError('b');
+  if not b.fIsValid then
+    Error(ER_VALUE_IS_NA, b.fName);
+  Result := a * b.Float;
+end;
+
 static function DataValue.operator /(a, b: DataValue): DataValue;
 begin
   ArithmeticType(a, b);
   if b.Float = 0 then
     Error(ER_DATAVALUE_DIVISION_BY_ZERO);
   Result := new DataValue(a.Name, a.Float / b.Float);
+end;
+
+static function DataValue.operator /(a: DataValue; b: integer): real;
+begin
+  if System.Object.ReferenceEquals(a, nil) then
+    ArgumentNullError('a');
+  if not a.fIsValid then
+    Error(ER_VALUE_IS_NA, a.fName);
+  if b = 0 then
+    Error(ER_DATAVALUE_DIVISION_BY_ZERO);
+  Result := a.Float / b;
+end;
+
+static function DataValue.operator /(a: DataValue; b: real): real;
+begin
+  if System.Object.ReferenceEquals(a, nil) then
+    ArgumentNullError('a');
+  if not a.fIsValid then
+    Error(ER_VALUE_IS_NA, a.fName);
+  if b = 0 then
+    Error(ER_DATAVALUE_DIVISION_BY_ZERO);
+  Result := a.Float / b;
+end;
+
+static function DataValue.operator /(a: integer; b: DataValue): real;
+begin
+  if System.Object.ReferenceEquals(b, nil) then
+    ArgumentNullError('b');
+  if not b.fIsValid then
+    Error(ER_VALUE_IS_NA, b.fName);
+  if b.Float = 0 then
+    Error(ER_DATAVALUE_DIVISION_BY_ZERO);
+  Result := a / b.Float;
+end;
+
+static function DataValue.operator /(a: real; b: DataValue): real;
+begin
+  if System.Object.ReferenceEquals(b, nil) then
+    ArgumentNullError('b');
+  if not b.fIsValid then
+    Error(ER_VALUE_IS_NA, b.fName);
+  if b.Float = 0 then
+    Error(ER_DATAVALUE_DIVISION_BY_ZERO);
+  Result := a / b.Float;
 end;
 
 procedure DataFrameSchema.Print;
@@ -1051,6 +1186,146 @@ end;
 //-----------------------------
 //           Columns
 //-----------------------------
+
+function Column.Count: integer;
+begin
+  Result := 0;
+  for var i := 0 to RowCount - 1 do
+    if IsValid[i] then
+      Result += 1;
+end;
+
+function Column.MissingCount: integer;
+begin
+  Result := 0;
+  for var i := 0 to RowCount - 1 do
+    if not IsValid[i] then
+      Result += 1;
+end;
+
+function Column.Min: real;
+begin
+  var values := ColumnNumericValues(Self);
+  if values.Count = 0 then
+    Error(ER_COLUMN_NO_VALID_VALUES, Info.Name);
+  Result := values.Min;
+end;
+
+function Column.Max: real;
+begin
+  var values := ColumnNumericValues(Self);
+  if values.Count = 0 then
+    Error(ER_COLUMN_NO_VALID_VALUES, Info.Name);
+  Result := values.Max;
+end;
+
+function Column.Mean: real;
+begin
+  var values := ColumnNumericValues(Self);
+  if values.Count = 0 then
+    exit(0.0);
+  Result := values.Sum / values.Count;
+end;
+
+function Column.Median: real;
+begin
+  var values := ColumnNumericValues(Self);
+  if values.Count = 0 then
+    Error(ER_COLUMN_NO_VALID_VALUES, Info.Name);
+
+  values.Sort;
+  var n := values.Count;
+  if n mod 2 = 1 then
+    Result := values[n div 2]
+  else
+    Result := (values[n div 2 - 1] + values[n div 2]) / 2.0;
+end;
+
+function Column.Variance: real;
+begin
+  var values := ColumnNumericValues(Self);
+  var cnt := values.Count;
+
+  if cnt <= 1 then
+    exit(0.0);
+
+  var mean := values.Sum / cnt;
+  var acc := 0.0;
+  foreach var v in values do
+  begin
+    var d := v - mean;
+    acc += d * d;
+  end;
+
+  Result := acc / (cnt - 1);
+end;
+
+function Column.Std: real;
+begin
+  Result := Sqrt(Variance);
+end;
+
+function Column.Unique: array of DataValue;
+begin
+  var values := new List<DataValue>;
+
+  case Info.ColType of
+    ctInt:
+    begin
+      var c := IntColumn(Self);
+      var seen := new HashSet<integer>;
+      for var i := 0 to c.Data.Length - 1 do
+        if c.IsValid[i] and seen.Add(c.Data[i]) then
+          values.Add(new DataValue(Info.Name, c.Data[i]));
+    end;
+
+    ctFloat:
+    begin
+      var c := FloatColumn(Self);
+      var seen := new HashSet<real>;
+      for var i := 0 to c.Data.Length - 1 do
+        if c.IsValid[i] and seen.Add(c.Data[i]) then
+          values.Add(new DataValue(Info.Name, c.Data[i]));
+    end;
+
+    ctStr:
+    begin
+      var c := StrColumn(Self);
+      var seen := new HashSet<string>;
+      for var i := 0 to c.Data.Length - 1 do
+        if c.IsValid[i] and seen.Add(c.Data[i]) then
+          values.Add(new DataValue(Info.Name, c.Data[i]));
+    end;
+
+    ctBool:
+    begin
+      var c := BoolColumn(Self);
+      var seen := new HashSet<boolean>;
+      for var i := 0 to c.Data.Length - 1 do
+        if c.IsValid[i] and seen.Add(c.Data[i]) then
+          values.Add(new DataValue(Info.Name, c.Data[i]));
+    end;
+
+    ctDateTime:
+    begin
+      var c := DateTimeColumn(Self);
+      var seen := new HashSet<System.DateTime>;
+      for var i := 0 to c.Data.Length - 1 do
+        if c.IsValid[i] and seen.Add(c.Data[i]) then
+          values.Add(new DataValue(Info.Name, c.Data[i]));
+    end;
+
+    else
+      Error(ER_UNKNOWN_COLUMN_TYPE);
+  end;
+
+  Result := values.ToArray;
+end;
+
+function Column.NUnique: integer;
+begin
+  Result := Unique.Length;
+end;
 
 constructor IntColumn.Create(name: string; values: array of integer; valid: array of boolean);
 begin
@@ -1475,3 +1750,5 @@ begin
 end;  
 
 end.
+
+

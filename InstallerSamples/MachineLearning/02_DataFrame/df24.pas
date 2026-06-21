@@ -1,4 +1,4 @@
-uses MLABC;
+﻿uses MLABC;
 
 begin
   var text := '''
@@ -7,10 +7,7 @@ id,created_at,name
 2,16.01.2024 12:30:00,Bob
 ''';
 
-  var df := CsvLoader.LoadFromLines(
-    text.ToLines,
-    inferTypes := True
-  );
+  var df := DataFrame.FromCsvText(text);
 
   df.Print;
   Println;

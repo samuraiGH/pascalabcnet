@@ -1,4 +1,4 @@
-uses MLABC, DataFrameABC, DataFrameABCCore;
+﻿uses MLABC, DataFrameABC, DataFrameABCCore;
 uses TestHelpers in '..\TestHelpers.pas';
 
 begin
@@ -34,3 +34,4 @@ Count
   Check(vc2.Int('Frequency')[0] = 2, 'ValueCounts conflict first frequency mismatch');
   CheckSchemaMatchesColumns(vc2);
 end.
+

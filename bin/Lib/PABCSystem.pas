@@ -1,4 +1,4 @@
-﻿// Copyright (c) Ivan Bondarev, Stanislav Mikhalkovich (for details please see \doc\copyright.txt)
+// Copyright (c) Ivan Bondarev, Stanislav Mikhalkovich (for details please see \doc\copyright.txt)
 // This code is distributed under the GNU LGPL (for details please see \doc\license.txt)
 
 /// Стандартный модуль
@@ -13592,15 +13592,30 @@ end;
 /// Вывод двумерного вещественного массива по формату :w:f
 function Print(Self: array [,] of real; w: integer := 7; f: integer := 2): array [,] of real; extensionmethod;
 begin
-  for var i := 0 to Self.RowCount - 1 do
+  if PrintMatrixWithFormat then
   begin
+    var widths := new integer[Self.ColCount];
     for var j := 0 to Self.ColCount - 1 do
     begin
-      if PrintMatrixWithFormat then
-        Write(FormatValue(Self[i, j], w, f))
-      else Print(Self[i, j]);
-    end;  
-    Writeln;  
+      widths[j] := w;
+      for var i := 0 to Self.RowCount - 1 do
+        widths[j] := Max(widths[j], FormatValue(Self[i, j], 0, f).Length + 1);
+    end;
+    for var i := 0 to Self.RowCount - 1 do
+    begin
+      for var j := 0 to Self.ColCount - 1 do
+        Write(FormatValue(Self[i, j], 0, f).PadLeft(widths[j]));
+      Writeln;
+    end;
+  end
+  else
+  begin
+    for var i := 0 to Self.RowCount - 1 do
+    begin
+      for var j := 0 to Self.ColCount - 1 do
+        Print(Self[i, j]);
+      Writeln;
+    end;
   end;
   Result := Self;  
 end;
