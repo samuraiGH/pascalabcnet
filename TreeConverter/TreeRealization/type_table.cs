@@ -1020,7 +1020,15 @@ namespace PascalABCCompiler.TreeRealization
             if (left is ref_type_node && right is ref_type_node)
                 return is_type_or_original_generics_equal((left as ref_type_node).pointed_type, (right as ref_type_node).pointed_type);
             if (left.type_special_kind == SemanticTree.type_special_kind.array_kind && right.type_special_kind == SemanticTree.type_special_kind.array_kind)
-                return is_type_or_original_generics_equal(left.element_type, right.element_type);
+            {
+                var lctn = left as compiled_type_node;
+                var rctn = right as compiled_type_node;
+                if (lctn == null || rctn == null)
+                    return is_type_or_original_generics_equal(left.element_type, right.element_type);
+                if (lctn != null && rctn != null && lctn.rank == rctn.rank)
+                    return is_type_or_original_generics_equal(left.element_type, right.element_type);
+            }
+                
             return left == right;
         }
 
